@@ -32,10 +32,10 @@ public class ButtonCategoryController {
                 .body(ApiResponse.success("카테고리가 생성되었습니다.", response));
     }
 
-    @DeleteMapping("/{categoryId}")
+    @DeleteMapping("/{category_id}")
     public ApiResponse<Object> deleteCategory(
             Authentication authentication,
-            @PathVariable Long categoryId,
+            @PathVariable("category_id") Long categoryId,
             @RequestParam("delete_buttons") Boolean deleteButtons
     ) {
         Long userId = (Long) authentication.getPrincipal();

@@ -33,27 +33,27 @@ public class ButtonController {
                 .body(ApiResponse.success("버튼이 생성되었습니다.", response));
     }
 
-    @PatchMapping("/{buttonId}")
+    @PatchMapping("/{button_id}")
     public ApiResponse<UpdateButtonResponseDto> updateButton(
             Authentication authentication,
-            @PathVariable Long buttonId,
+            @PathVariable("button_id") Long buttonId,
             @RequestBody UpdateButtonRequestDto request
     ) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.success("버튼 정보가 수정되었습니다.", buttonService.updateButton(userId, buttonId, request));
     }
 
-    @DeleteMapping("/{buttonId}")
-    public ApiResponse<Object> deleteButton(Authentication authentication, @PathVariable Long buttonId) {
+    @DeleteMapping("/{button_id}")
+    public ApiResponse<Object> deleteButton(Authentication authentication, @PathVariable("button_id") Long buttonId) {
         Long userId = (Long) authentication.getPrincipal();
         buttonService.deleteButton(userId, buttonId);
         return ApiResponse.success("버튼과 모든 기록이 삭제되었습니다.", null);
     }
 
-    @PatchMapping("/{buttonId}/favorite")
+    @PatchMapping("/{button_id}/favorite")
     public ApiResponse<FavoriteResponseDto> setFavorite(
             Authentication authentication,
-            @PathVariable Long buttonId,
+            @PathVariable("button_id") Long buttonId,
             @RequestBody FavoriteRequestDto request
     ) {
         Long userId = (Long) authentication.getPrincipal();
