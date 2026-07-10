@@ -31,20 +31,20 @@ public class TemplateController {
         return ApiResponse.success("템플릿 목록 조회가 완료되었습니다.", templates);
     }
 
-    @GetMapping("/{templateId}/recommendations")
-    public ApiResponse<TemplatePreviewResponseDto> getTemplatePreview(@PathVariable Long templateId) {
-        TemplatePreviewResponseDto preview = templateService.getTemplatePreview(templateId);
+    @GetMapping("/{template_id}/recommendations")
+    public ApiResponse<TemplatePreviewResponseDto> getTemplatePreview(@PathVariable Long template_id) {
+        TemplatePreviewResponseDto preview = templateService.getTemplatePreview(template_id);
         return ApiResponse.success("템플릿 미리보기 조회가 완료되었습니다.", preview);
     }
 
-    @PostMapping("/{templateId}/apply")
+    @PostMapping("/{template_id}/apply")
     public ResponseEntity<ApiResponse<TemplateApplyResponseDto>> applyTemplate(
             Authentication authentication,
-            @PathVariable Long templateId,
+            @PathVariable Long template_id,
             @RequestBody TemplateApplyRequestDto request
     ) {
         Long userId = (Long) authentication.getPrincipal();
-        TemplateApplyResponseDto response = templateService.applyTemplate(userId, templateId, request);
+        TemplateApplyResponseDto response = templateService.applyTemplate(userId, template_id, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("템플릿이 적용되었습니다.", response));
     }
