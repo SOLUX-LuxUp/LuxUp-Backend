@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface ButtonCategoryRepository extends JpaRepository<ButtonCategory, Long> {
     boolean existsByCategoryIdAndUserId(Long categoryId, Long userId);
+
     boolean existsByUserIdAndCategoryNameAndDeletedAtIsNull(Long userId, String categoryName);
 
     @Query("SELECT MAX(c.displayOrder) FROM ButtonCategory c WHERE c.userId = :userId AND c.deletedAt IS NULL")
