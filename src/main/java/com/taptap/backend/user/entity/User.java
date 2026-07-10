@@ -49,8 +49,8 @@ public class User {
 
     // 비즈니스 로직: 프로필 수정용 편의 메서드
     public void updateProfile(String username, String profileImageUrl) {
-        this.username = username;
-        this.profileImageUrl = profileImageUrl;
+        if (username != null) this.username = username;
+        if (profileImageUrl != null) this.profileImageUrl = profileImageUrl;
         this.updatedAt = LocalDateTime.now();
     }
 }

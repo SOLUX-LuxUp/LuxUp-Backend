@@ -1,6 +1,7 @@
 package com.taptap.backend.user.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +9,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Schema(description = "9.1 프로필 수정 요청")
 public class UserProfileUpdateRequest {
+
+    @Size(min = 1, max = 50, message = "유저 이름은 1자 이상 50자 이하로 입력해주세요.")
     @Schema(description = "유저 이름 수정", example = "새이름")
     private String username;
 
