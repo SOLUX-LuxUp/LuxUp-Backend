@@ -1,9 +1,12 @@
 package com.taptap.backend.user.service;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.taptap.backend.button.repository.ButtonRepository;
 import com.taptap.backend.config.AuthException;
 import com.taptap.backend.config.GoogleTokenVerifier;
 import com.taptap.backend.config.JwtProvider;
+import com.taptap.backend.record.repository.ButtonRecordRepository;
+import com.taptap.backend.reminder.repository.ReminderRepository;
 import com.taptap.backend.template.repository.UserTemplateSelectionRepository;
 import com.taptap.backend.user.dto.*;
 import com.taptap.backend.user.entity.EmailVerification;
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class AuthService {
@@ -26,6 +30,9 @@ public class AuthService {
     private final EmailVerificationRepository emailVerificationRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserTemplateSelectionRepository userTemplateSelectionRepository;
+    private final ButtonRepository buttonRepository;
+    private final ButtonRecordRepository buttonRecordRepository;
+    private final ReminderRepository reminderRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final GoogleTokenVerifier googleTokenVerifier;
@@ -35,6 +42,9 @@ public class AuthService {
             EmailVerificationRepository emailVerificationRepository,
             RefreshTokenRepository refreshTokenRepository,
             UserTemplateSelectionRepository userTemplateSelectionRepository,
+            ButtonRepository buttonRepository,
+            ButtonRecordRepository buttonRecordRepository,
+            ReminderRepository reminderRepository,
             PasswordEncoder passwordEncoder,
             JwtProvider jwtProvider,
             GoogleTokenVerifier googleTokenVerifier
@@ -43,6 +53,9 @@ public class AuthService {
         this.emailVerificationRepository = emailVerificationRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.userTemplateSelectionRepository = userTemplateSelectionRepository;
+        this.buttonRepository = buttonRepository;
+        this.buttonRecordRepository = buttonRecordRepository;
+        this.reminderRepository = reminderRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.googleTokenVerifier = googleTokenVerifier;
@@ -50,7 +63,7 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmailAndStatus(request.email(), "ACTIVE")) {
             throw new AuthException(HttpStatus.BAD_REQUEST, "이미 가입된 이메일입니다.");
         }
 
@@ -72,7 +85,7 @@ public class AuthService {
         User user = new User();
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setUsername(generateDefaultUsername(request.email()));
+        user.setUsername(request.username());
         user.setLoginType("EMAIL");
         user.setStatus("ACTIVE");
         userRepository.save(user);
@@ -84,6 +97,7 @@ public class AuthService {
         return new RegisterResponse(
                 user.getUserId(),
                 user.getEmail(),
+                user.getUsername(),
                 accessToken,
                 refreshToken,
                 true,
@@ -95,6 +109,10 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 계정입니다."));
+
+        if ("DELETED".equals(user.getStatus())) {
+            throw new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 계정입니다.");
+        }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new AuthException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 일치하지 않습니다.");
@@ -139,6 +157,10 @@ public class AuthService {
 
         return userRepository.findByGoogleSub(googleSub)
                 .map(user -> {
+                    if ("DELETED".equals(user.getStatus())) {
+                        throw new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 계정입니다.");
+                    }
+
                     String accessToken = jwtProvider.generateAccessToken(user.getUserId());
                     String refreshToken = jwtProvider.generateRefreshToken(user.getUserId());
                     saveRefreshToken(user.getUserId(), refreshToken);
@@ -168,6 +190,48 @@ public class AuthService {
                     );
                     return new GoogleLoginResult(response, true);
                 });
+    }
+
+    @Transactional
+    public void logout(Long userId, LogoutRequest request) {
+        RefreshToken tokenEntity = refreshTokenRepository.findByToken(request.refreshToken())
+                .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다."));
+
+        if (!tokenEntity.getUserId().equals(userId)) {
+            throw new AuthException(HttpStatus.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
+        }
+
+        tokenEntity.setIsRevoked(true);
+        refreshTokenRepository.save(tokenEntity);
+    }
+
+    @Transactional
+    public void withdraw(Long userId, WithdrawRequest request) {
+        RefreshToken tokenEntity = refreshTokenRepository.findByToken(request.refreshToken())
+                .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다."));
+
+        if (!tokenEntity.getUserId().equals(userId)) {
+            throw new AuthException(HttpStatus.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
+        }
+
+        tokenEntity.setIsRevoked(true);
+        refreshTokenRepository.save(tokenEntity);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "존재하지 않는 계정입니다."));
+        user.setStatus("DELETED");
+        user.setDeletedAt(LocalDateTime.now());
+        if (user.getEmail() != null) {
+            user.setEmail(user.getEmail() + "_deleted_" + System.currentTimeMillis());
+        }
+        userRepository.save(user);
+
+        List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
+        if (!buttonIds.isEmpty()) {
+            buttonRecordRepository.softDeleteByButtonIds(buttonIds);
+            reminderRepository.softDeleteByButtonIds(buttonIds);
+        }
+        buttonRepository.deactivateAllByUserId(userId);
     }
 
     private boolean resolveOnboardingRequired(Long userId) {
