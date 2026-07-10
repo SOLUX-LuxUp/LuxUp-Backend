@@ -7,10 +7,9 @@ import com.taptap.backend.user.service.EmailVerificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -47,6 +46,17 @@ public class AuthController {
     ) {
         LoginResponse response = authService.login(request);
         return ApiResponse.success("로그인이 완료되었습니다.", response);
+    }
+
+    @SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/sessions")
+    public ApiResponse<Void> logout(
+            Authentication authentication,
+            @Valid @RequestBody LogoutRequest request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        authService.logout(userId, request);
+        return ApiResponse.<Void>success("로그아웃이 완료되었습니다.", null);
     }
 
     @PostMapping("/tokens/refresh")

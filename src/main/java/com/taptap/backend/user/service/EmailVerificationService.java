@@ -35,7 +35,7 @@ public class EmailVerificationService {
 
     @Transactional
     public VerificationCodeResponse sendCode(String email) {
-        if (userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmailAndStatus(email, "ACTIVE")) {
             throw new AuthException(HttpStatus.BAD_REQUEST, "이미 가입된 이메일입니다.");
         }
 
