@@ -1,30 +1,28 @@
 package com.taptap.backend.user.service;
 
-import com.taptap.backend.config.exception.CustomException;
-import com.taptap.backend.config.exception.ErrorCode;
+import com.taptap.backend.config.AuthException;
 import com.taptap.backend.user.dto.UserProfileResponse;
 import com.taptap.backend.user.dto.UserProfileUpdateRequest;
 import com.taptap.backend.user.entity.User;
 import com.taptap.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 9.1 유저 프로필 도메인 서비스.
- * (기존에는 setting.service.SettingService 안에 같이 들어있었는데,
- *  도메인 경계를 명확히 하려고 user 패키지로 분리했습니다.)
+ * AuthService(로그인/탈퇴)와 같은 user 패키지에 있지만, 책임을 분리해서 별도 클래스로 둠.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserProfileService {
 
+    private static final String ACTIVE_STATUS = "ACTIVE";
+
     private final UserRepository userRepository;
 
-    /**
-     * 9.1 유저 프로필 조회
-     */
     public UserProfileResponse.Get getUserProfile(Long userId) {
         User user = findActiveUser(userId);
 
@@ -37,14 +35,18 @@ public class UserProfileService {
                 .build();
     }
 
-    /**
-     * 9.1 유저 프로필 수정
-     */
     @Transactional
     public UserProfileResponse.Update updateUserProfile(Long userId, UserProfileUpdateRequest request) {
         User user = findActiveUser(userId);
 
-        user.updateProfile(request.getUsername(), request.getProfileImageUrl());
+        // User 엔티티엔 편의 메서드가 없어서, null(=PATCH에서 생략된 필드)이면
+        // 기존 값을 유지하도록 여기서 직접 체크한다. (updatedAt은 @PreUpdate가 자동 처리)
+        if (request.getUsername() != null) {
+            user.setUsername(request.getUsername());
+        }
+        if (request.getProfileImageUrl() != null) {
+            user.setProfileImageUrl(request.getProfileImageUrl());
+        }
 
         return UserProfileResponse.Update.builder()
                 .userId(user.getUserId())
@@ -54,7 +56,12 @@ public class UserProfileService {
     }
 
     private User findActiveUser(Long userId) {
-        return userRepository.findByUserIdAndStatus(userId, "ACTIVE")
-                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 유저입니다."));
+
+        if (!ACTIVE_STATUS.equals(user.getStatus())) {
+            throw new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 유저입니다.");
+        }
+        return user;
     }
 }
