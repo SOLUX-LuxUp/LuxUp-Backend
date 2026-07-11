@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
  * 9.2 알림 마스터 설정 도메인 서비스.
  */
@@ -25,6 +27,10 @@ public class SettingService {
     private final UserRepository userRepository;
     private final UserNotificationSettingRepository userNotificationSettingRepository;
 
+    // ⚠️ 조회(GET) API지만, 내부적으로 "설정이 없으면 새로 생성"하는 쓰기 로직이 있어서
+    //    클래스 레벨의 @Transactional(readOnly=true)를 여기서 덮어써야 한다.
+    //    readOnly 상태에서는 MySQL 커넥션 자체가 쓰기를 거부해서 INSERT가 실패한다.
+    @Transactional
     public NotificationSettingResponse getNotificationSettings(Long userId) {
         UserNotificationSetting setting = getOrCreateSetting(userId);
         return toResponse(setting);
@@ -57,6 +63,8 @@ public class SettingService {
                             .soundEnabled(true)
                             .vibrationEnabled(true)
                             .popupOverlay(false)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
                             .build();
 
                     return userNotificationSettingRepository.save(newSetting);
