@@ -1,7 +1,6 @@
 package com.taptap.backend.button.controller;
 
-import com.taptap.backend.button.dto.CategoryResponseDto;
-import com.taptap.backend.button.dto.CreateCategoryRequestDto;
+import com.taptap.backend.button.dto.*;
 import com.taptap.backend.button.service.ButtonCategoryService;
 import com.taptap.backend.config.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,6 +29,16 @@ public class ButtonCategoryController {
         CategoryResponseDto response = buttonCategoryService.createCategory(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("카테고리가 생성되었습니다.", response));
+    }
+
+    @PatchMapping("/{category_id}")
+    public ApiResponse<CategoryUpdateResponseDto> updateCategoryName(
+            Authentication authentication,
+            @PathVariable("category_id") Long categoryId,
+            @RequestBody UpdateCategoryNameRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("카테고리 이름이 수정되었습니다.", buttonCategoryService.updateCategoryName(userId, categoryId, request));
     }
 
     @DeleteMapping("/{category_id}")
