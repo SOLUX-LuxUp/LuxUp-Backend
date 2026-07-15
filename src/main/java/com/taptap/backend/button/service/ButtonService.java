@@ -98,6 +98,13 @@ public class ButtonService {
         return new ButtonListResponseDto(favorites, categories);
     }
 
+    @Transactional(readOnly = true)
+    public List<FavoriteButtonItemDto> getFavoriteButtons(Long userId) {
+        List<Button> buttons = buttonRepository.findByUserIdAndIsActiveTrue(userId);
+        Map<Long, LocalDateTime> lastRecordedMap = fetchLastRecordedAtMap(buttons);
+        return buildFavorites(buttons, lastRecordedMap);
+    }
+
     private Map<Long, LocalDateTime> fetchLastRecordedAtMap(List<Button> buttons) {
         if (buttons.isEmpty()) {
             return Map.of();

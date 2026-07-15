@@ -69,6 +69,12 @@ public class ButtonController {
         return ApiResponse.success("즐겨찾기 순서가 변경되었습니다.", buttonService.updateFavoriteOrder(userId, request.buttonIds()));
     }
 
+    @GetMapping("/favorites")
+    public ApiResponse<List<FavoriteButtonItemDto>> getFavoriteButtons(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("즐겨찾기 버튼 목록 조회가 완료되었습니다.", buttonService.getFavoriteButtons(userId));
+    }
+
     @GetMapping
     public ApiResponse<ButtonListResponseDto> getButtons(
             Authentication authentication,
