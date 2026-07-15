@@ -7,9 +7,13 @@ import com.taptap.backend.record.dto.RecordCreateResponseDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
 import com.taptap.backend.record.dto.RecordRecentResponseDto;
 import com.taptap.backend.record.dto.RecordSummaryResponseDto;
+import com.taptap.backend.record.dto.RecordTimelineItemDto;
+import com.taptap.backend.record.dto.RecordTimelineResponseDto;
 import com.taptap.backend.record.entity.ButtonRecord;
 import com.taptap.backend.record.repository.ButtonRecordRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -163,6 +167,43 @@ public class RecordService {
                 .lastRecordedAt(lastRecordedAt)
                 .todayCount(todayCount)
                 .totalCount(totalCount)
+                .build();
+    }
+
+    /**
+     * 5.3 타임라인 조회
+     * - recordId 기준 커서 페이지네이션, 최신순(recordId 내림차순).
+     * - limit보다 1개 더 가져와서, 넘치면 "더 있다(hasMore=true)"로 판단하는 방식.
+     * - limit이 없거나 범위를 벗어나면 기본값 30으로 보정한다.
+     */
+    public RecordTimelineResponseDto getTimeline(Long userId, Long buttonId, Long cursor, Integer limit) {
+        Button button = findOwnedButton(userId, buttonId);
+
+        int pageSize = (limit == null || limit <= 0 || limit > 30) ? 30 : limit;
+        Pageable pageable = PageRequest.of(0, pageSize + 1);
+
+        List<ButtonRecord> fetched = buttonRecordRepository.findTimeline(button.getButtonId(), cursor, pageable);
+
+        boolean hasMore = fetched.size() > pageSize;
+        List<ButtonRecord> pageItems = hasMore ? fetched.subList(0, pageSize) : fetched;
+
+        List<RecordTimelineItemDto> items = pageItems.stream()
+                .map(r -> RecordTimelineItemDto.builder()
+                        .recordId(r.getRecordId())
+                        .recordedAt(r.getRecordedAt())
+                        .memo(r.getMemo())
+                        .emoji(r.getEmoji())
+                        .build())
+                .toList();
+
+        Long nextCursor = (hasMore && !pageItems.isEmpty())
+                ? pageItems.get(pageItems.size() - 1).getRecordId()
+                : null;
+
+        return RecordTimelineResponseDto.builder()
+                .records(items)
+                .nextCursor(nextCursor)
+                .hasMore(hasMore)
                 .build();
     }
 }

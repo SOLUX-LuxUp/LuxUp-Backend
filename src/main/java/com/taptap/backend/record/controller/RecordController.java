@@ -4,6 +4,7 @@ import com.taptap.backend.config.ApiResponse;
 import com.taptap.backend.record.dto.RecordCreateResponseDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
 import com.taptap.backend.record.dto.RecordSummaryResponseDto;
+import com.taptap.backend.record.dto.RecordTimelineResponseDto;
 import com.taptap.backend.record.service.RecordService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -67,5 +68,19 @@ public class RecordController {
         Long userId = (Long) authentication.getPrincipal();
         RecordSummaryResponseDto response = recordService.getButtonSummary(userId, buttonId);
         return ApiResponse.success("버튼 요약 조회가 완료되었습니다.", response);
+    }
+
+    @Operation(summary = "5.3 타임라인 조회")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/timeline")
+    public ApiResponse<RecordTimelineResponseDto> getTimeline(
+            Authentication authentication,
+            @PathVariable("button_id") Long buttonId,
+            @RequestParam(value = "cursor", required = false) Long cursor,
+            @RequestParam(value = "limit", required = false, defaultValue = "30") Integer limit
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        RecordTimelineResponseDto response = recordService.getTimeline(userId, buttonId, cursor, limit);
+        return ApiResponse.success("타임라인 조회가 완료되었습니다.", response);
     }
 }

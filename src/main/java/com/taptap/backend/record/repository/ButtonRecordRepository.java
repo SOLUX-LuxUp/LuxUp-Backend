@@ -1,6 +1,7 @@
 package com.taptap.backend.record.repository;
 
 import com.taptap.backend.record.entity.ButtonRecord;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -33,5 +34,14 @@ public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long
             @Param("buttonId") Long buttonId,
             @Param("startOfDay") LocalDateTime startOfDay,
             @Param("endOfDay") LocalDateTime endOfDay
+    );
+
+    // 5.3 타임라인 조회 - 커서(recordId) 기반 페이지네이션, 최신순
+    @Query("SELECT br FROM ButtonRecord br WHERE br.buttonId = :buttonId AND br.deletedAt IS NULL " +
+            "AND (:cursor IS NULL OR br.recordId < :cursor) ORDER BY br.recordId DESC")
+    List<ButtonRecord> findTimeline(
+            @Param("buttonId") Long buttonId,
+            @Param("cursor") Long cursor,
+            Pageable pageable
     );
 }
