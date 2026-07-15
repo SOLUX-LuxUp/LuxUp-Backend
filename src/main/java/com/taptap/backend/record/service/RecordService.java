@@ -4,6 +4,8 @@ import com.taptap.backend.button.entity.Button;
 import com.taptap.backend.button.exception.ButtonException;
 import com.taptap.backend.button.repository.ButtonRepository;
 import com.taptap.backend.record.dto.RecordCreateResponseDto;
+import com.taptap.backend.record.dto.RecordDetailResponseDto;
+import com.taptap.backend.record.dto.RecordDetailUpdateRequestDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
 import com.taptap.backend.record.dto.RecordRecentResponseDto;
 import com.taptap.backend.record.dto.RecordSummaryResponseDto;
@@ -65,13 +67,28 @@ public class RecordService {
 
     /**
      * 4.2-2 기록 취소 (팝업 3초 이내)
-     * - 기록 자체가 없거나(이미 소프트 삭제 포함), button_id가 안 맞으면 404
-     * - 기록은 있지만 내 버튼이 아니면 403
      * - 생성 후 3초가 지났으면 409
      * - 취소는 "없었던 일로" 되돌리는 개념이라 소프트 삭제가 아니라 완전 삭제한다.
      */
     @Transactional
     public void cancelRecord(Long userId, Long buttonId, Long recordId) {
+        ButtonRecord record = findOwnedRecord(userId, buttonId, recordId);
+
+        LocalDateTime cancelDeadline = record.getCreatedAt().plusSeconds(3);
+        if (LocalDateTime.now().isAfter(cancelDeadline)) {
+            throw new ButtonException(HttpStatus.CONFLICT, "취소 가능 시간(3초)이 지났습니다.");
+        }
+
+        buttonRecordRepository.delete(record);
+    }
+
+    /**
+     * 기록 1건을 찾고, 존재/소유 여부를 검증하는 공용 헬퍼.
+     * - 기록 자체가 없거나(이미 소프트 삭제 포함), button_id가 안 맞으면 404
+     * - 기록은 있지만 내 버튼이 아니면 403
+     * (기록 취소, 타임라인 상세 추가, 타임라인 삭제 등에서 공통으로 재사용한다.)
+     */
+    private ButtonRecord findOwnedRecord(Long userId, Long buttonId, Long recordId) {
         ButtonRecord record = buttonRecordRepository.findById(recordId)
                 .filter(r -> r.getDeletedAt() == null)
                 .filter(r -> r.getButtonId().equals(buttonId))
@@ -84,12 +101,7 @@ public class RecordService {
             throw new ButtonException(HttpStatus.FORBIDDEN, "본인 기록이 아닙니다.");
         }
 
-        LocalDateTime cancelDeadline = record.getCreatedAt().plusSeconds(3);
-        if (LocalDateTime.now().isAfter(cancelDeadline)) {
-            throw new ButtonException(HttpStatus.CONFLICT, "취소 가능 시간(3초)이 지났습니다.");
-        }
-
-        buttonRecordRepository.delete(record);
+        return record;
     }
 
     /**
@@ -204,6 +216,37 @@ public class RecordService {
                 .records(items)
                 .nextCursor(nextCursor)
                 .hasMore(hasMore)
+                .build();
+    }
+
+    /**
+     * 5.4 타임라인 상세 기록 추가 (메모·이모지)
+     * - request.getMemo()/getEmoji()가 자바에서 null이면 "JSON에 그 키 자체가 없었다"는 뜻이라
+     *   건드리지 않는다. Optional.empty()면 명시적으로 null이 와서 삭제, Optional.of(값)이면 수정.
+     * - memo, emoji 둘 다 키 자체가 없으면(둘 다 null) 400.
+     */
+    @Transactional
+    public RecordDetailResponseDto updateDetail(
+            Long userId, Long buttonId, Long recordId, RecordDetailUpdateRequestDto request
+    ) {
+        if (request.getMemo() == null && request.getEmoji() == null) {
+            throw new ButtonException(HttpStatus.BAD_REQUEST, "memo, emoji 중 하나는 포함되어야 합니다.");
+        }
+
+        ButtonRecord record = findOwnedRecord(userId, buttonId, recordId);
+
+        if (request.getMemo() != null) {
+            record.setMemo(request.getMemo().orElse(null));
+        }
+        if (request.getEmoji() != null) {
+            record.setEmoji(request.getEmoji().orElse(null));
+        }
+
+        return RecordDetailResponseDto.builder()
+                .recordId(record.getRecordId())
+                .memo(record.getMemo())
+                .emoji(record.getEmoji())
+                .recordedAt(record.getRecordedAt())
                 .build();
     }
 }

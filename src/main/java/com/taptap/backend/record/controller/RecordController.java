@@ -2,6 +2,8 @@ package com.taptap.backend.record.controller;
 
 import com.taptap.backend.config.ApiResponse;
 import com.taptap.backend.record.dto.RecordCreateResponseDto;
+import com.taptap.backend.record.dto.RecordDetailResponseDto;
+import com.taptap.backend.record.dto.RecordDetailUpdateRequestDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
 import com.taptap.backend.record.dto.RecordSummaryResponseDto;
 import com.taptap.backend.record.dto.RecordTimelineResponseDto;
@@ -82,5 +84,19 @@ public class RecordController {
         Long userId = (Long) authentication.getPrincipal();
         RecordTimelineResponseDto response = recordService.getTimeline(userId, buttonId, cursor, limit);
         return ApiResponse.success("타임라인 조회가 완료되었습니다.", response);
+    }
+
+    @Operation(summary = "5.4 타임라인 상세 기록 추가 (메모·이모지)")
+    @SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/{record_id}/detail")
+    public ApiResponse<RecordDetailResponseDto> updateDetail(
+            Authentication authentication,
+            @PathVariable("button_id") Long buttonId,
+            @PathVariable("record_id") Long recordId,
+            @RequestBody RecordDetailUpdateRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        RecordDetailResponseDto response = recordService.updateDetail(userId, buttonId, recordId, request);
+        return ApiResponse.success("기록이 수정되었습니다.", response);
     }
 }
