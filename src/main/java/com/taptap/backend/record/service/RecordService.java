@@ -5,6 +5,7 @@ import com.taptap.backend.button.exception.ButtonException;
 import com.taptap.backend.button.repository.ButtonRepository;
 import com.taptap.backend.record.dto.RecordCreateResponseDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
+import com.taptap.backend.record.dto.RecordRecentResponseDto;
 import com.taptap.backend.record.entity.ButtonRecord;
 import com.taptap.backend.record.repository.ButtonRecordRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -101,6 +103,33 @@ public class RecordService {
                 .buttonId(button.getButtonId())
                 .lastRecordedAt(latest.getRecordedAt())
                 .elapsedSeconds(elapsedSeconds)
+                .build();
+    }
+
+    /**
+     * 5.1 최근 기록 조회 (홈)
+     * - 특정 버튼이 아니라, 내가 가진 활성 버튼 전체 중 가장 최근 기록을 찾는다.
+     * - 활성 버튼이 하나도 없거나, 기록이 하나도 없으면 404.
+     */
+    public RecordRecentResponseDto getRecentRecord(Long userId) {
+        List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
+        if (buttonIds.isEmpty()) {
+            throw new ButtonException(HttpStatus.NOT_FOUND, "기록이 없습니다.");
+        }
+
+        ButtonRecord latest = buttonRecordRepository
+                .findTopByButtonIdInAndDeletedAtIsNullOrderByRecordedAtDesc(buttonIds)
+                .orElseThrow(() -> new ButtonException(HttpStatus.NOT_FOUND, "기록이 없습니다."));
+
+        Button button = buttonRepository.findById(latest.getButtonId())
+                .orElseThrow(() -> new ButtonException(HttpStatus.NOT_FOUND, "기록이 없습니다."));
+
+        return RecordRecentResponseDto.builder()
+                .buttonId(button.getButtonId())
+                .buttonName(button.getButtonName())
+                .iconName(button.getIconName())
+                .iconColor(button.getIconColor())
+                .lastRecordedAt(latest.getRecordedAt())
                 .build();
     }
 }

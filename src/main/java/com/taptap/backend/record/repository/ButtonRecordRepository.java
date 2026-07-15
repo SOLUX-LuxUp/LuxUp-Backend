@@ -18,4 +18,7 @@ public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long
 
     // 4.7 마지막 기록 시간 조회 - 소프트 삭제 안 된 것 중 가장 최근 기록 1건
     Optional<ButtonRecord> findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long buttonId);
+
+    // 5.1 최근 기록 조회(홈) - 여러 버튼 중 소프트 삭제 안 된 것 중 가장 최근 기록 1건
+    Optional<ButtonRecord> findTopByButtonIdInAndDeletedAtIsNullOrderByRecordedAtDesc(List<Long> buttonIds);
 }
