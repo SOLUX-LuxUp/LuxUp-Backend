@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long> {
 
@@ -15,4 +16,6 @@ public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long
             "WHERE br.buttonId IN :buttonIds AND br.deletedAt IS NULL")
     void softDeleteByButtonIds(@Param("buttonIds") List<Long> buttonIds);
 
+    // 4.7 마지막 기록 시간 조회 - 소프트 삭제 안 된 것 중 가장 최근 기록 1건
+    Optional<ButtonRecord> findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long buttonId);
 }

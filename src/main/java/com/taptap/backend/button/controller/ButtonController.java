@@ -88,6 +88,7 @@ public class ButtonController {
     ) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.success("버튼 검색이 완료되었습니다.", buttonService.searchButtons(userId, keyword));
+    }
     @GetMapping("/favorites")
     public ApiResponse<List<FavoriteButtonItemDto>> getFavoriteButtons(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
