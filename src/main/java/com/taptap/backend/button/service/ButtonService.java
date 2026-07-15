@@ -390,6 +390,27 @@ public class ButtonService {
         return DEFAULT_ICON_COLORS.get(random.nextInt(DEFAULT_ICON_COLORS.size()));
     }
 
+    @Transactional(readOnly = true)
+    public List<FavoriteButtonItemDto> searchButtons(Long userId, String keyword) {
+        List<Button> buttons = buttonRepository.findByUserIdAndIsActiveTrueAndButtonNameContainingIgnoreCase(userId, keyword);
+        Map<Long, LocalDateTime> lastRecordedMap = fetchLastRecordedAtMap(buttons);
+        Map<Long, ButtonCategory> categoryMap = loadCategoriesForButtons(buttons);
+
+        return buttons.stream()
+                .map(b -> {
+                    ButtonCategory category = b.getCategoryId() != null ? categoryMap.get(b.getCategoryId()) : null;
+                    return new FavoriteButtonItemDto(
+                            b.getButtonId(), b.getButtonName(), b.getIconName(), b.getIconColor(),
+                            b.getCategoryId(), category != null ? category.getCategoryName() : null,
+                            b.getIsFavorite(), b.getFavoriteOrder(),
+                            b.getGoalEnabled(), b.getGoalName(), b.getGoalPeriodUnit(), b.getGoalCount(), b.getGoalComparisonType(),
+                            b.getExpiryEnabled(), b.getExpiredAt(), b.getIsActive(),
+                            lastRecordedMap.get(b.getButtonId()), b.getCreatedAt()
+                    );
+                })
+                .toList();
+    }
+
     private ButtonResponseDto toResponseDto(Button button) {
         return new ButtonResponseDto(
                 button.getButtonId(),

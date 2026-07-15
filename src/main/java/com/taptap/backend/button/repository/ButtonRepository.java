@@ -34,4 +34,5 @@ public interface ButtonRepository extends JpaRepository<Button, Long> {
     void decrementFavoriteOrderAfter(@Param("userId") Long userId, @Param("order") Integer order);
 
     List<Button> findByUserIdAndIsActiveTrue(Long userId);
+    List<Button> findByUserIdAndIsActiveTrueAndButtonNameContainingIgnoreCase(Long userId, String keyword);
 }
