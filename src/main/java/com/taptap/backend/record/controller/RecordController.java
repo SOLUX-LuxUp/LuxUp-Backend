@@ -99,4 +99,17 @@ public class RecordController {
         RecordDetailResponseDto response = recordService.updateDetail(userId, buttonId, recordId, request);
         return ApiResponse.success("기록이 수정되었습니다.", response);
     }
+
+    @Operation(summary = "5.5 타임라인 기록 삭제")
+    @SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/{record_id}")
+    public ApiResponse<Void> deleteRecord(
+            Authentication authentication,
+            @PathVariable("button_id") Long buttonId,
+            @PathVariable("record_id") Long recordId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        recordService.deleteRecord(userId, buttonId, recordId);
+        return ApiResponse.<Void>success("기록이 삭제되었습니다.", null);
+    }
 }

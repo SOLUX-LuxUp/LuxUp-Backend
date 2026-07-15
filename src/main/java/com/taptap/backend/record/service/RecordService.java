@@ -249,4 +249,15 @@ public class RecordService {
                 .recordedAt(record.getRecordedAt())
                 .build();
     }
+
+    /**
+     * 5.5 타임라인 기록 삭제
+     * - 소프트 삭제(deleted_at 갱신)만 하고 실제로 지우지 않는다.
+     * - 트랜잭션 안에서 관리되는 엔티티라, save() 없이 필드만 바꿔도 커밋 시점에 자동 반영된다(dirty checking).
+     */
+    @Transactional
+    public void deleteRecord(Long userId, Long buttonId, Long recordId) {
+        ButtonRecord record = findOwnedRecord(userId, buttonId, recordId);
+        record.setDeletedAt(LocalDateTime.now());
+    }
 }
