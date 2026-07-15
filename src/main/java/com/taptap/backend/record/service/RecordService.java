@@ -6,6 +6,7 @@ import com.taptap.backend.button.repository.ButtonRepository;
 import com.taptap.backend.record.dto.RecordCreateResponseDto;
 import com.taptap.backend.record.dto.RecordLatestResponseDto;
 import com.taptap.backend.record.dto.RecordRecentResponseDto;
+import com.taptap.backend.record.dto.RecordSummaryResponseDto;
 import com.taptap.backend.record.entity.ButtonRecord;
 import com.taptap.backend.record.repository.ButtonRecordRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -130,6 +132,37 @@ public class RecordService {
                 .iconName(button.getIconName())
                 .iconColor(button.getIconColor())
                 .lastRecordedAt(latest.getRecordedAt())
+                .build();
+    }
+
+    /**
+     * 5.2 최근 기록 조회 (버튼 상세)
+     * - 버튼이 없으면(또는 내 버튼이 아니면) 404.
+     * - 3번 API(마지막 기록 시간 조회)와 달리, 기록이 0건이어도 에러가 아니라
+     *   lastRecordedAt=null, count=0으로 정상 응답한다 (버튼 상세 화면은 항상 떠야 하니까).
+     */
+    public RecordSummaryResponseDto getButtonSummary(Long userId, Long buttonId) {
+        Button button = findOwnedButton(userId, buttonId);
+
+        LocalDateTime lastRecordedAt = buttonRecordRepository
+                .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(button.getButtonId())
+                .map(ButtonRecord::getRecordedAt)
+                .orElse(null);
+
+        LocalDate today = LocalDate.now();
+        long todayCount = buttonRecordRepository.countTodayByButtonId(
+                button.getButtonId(),
+                today.atStartOfDay(),
+                today.plusDays(1).atStartOfDay()
+        );
+
+        long totalCount = buttonRecordRepository.countByButtonIdAndDeletedAtIsNull(button.getButtonId());
+
+        return RecordSummaryResponseDto.builder()
+                .buttonId(button.getButtonId())
+                .lastRecordedAt(lastRecordedAt)
+                .todayCount(todayCount)
+                .totalCount(totalCount)
                 .build();
     }
 }
