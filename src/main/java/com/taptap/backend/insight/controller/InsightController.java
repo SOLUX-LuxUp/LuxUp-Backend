@@ -2,6 +2,7 @@ package com.taptap.backend.insight.controller;
 
 import com.taptap.backend.config.ApiResponse;
 import com.taptap.backend.insight.dto.InsightDailyResponseDto;
+import com.taptap.backend.insight.dto.InsightWeeklyResponseDto;
 import com.taptap.backend.insight.service.InsightService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,7 +25,7 @@ public class InsightController {
 
     private final InsightService insightService;
 
-    @Operation(summary = "9. 데일리 인사이트 조회")
+    @Operation(summary = "7.1 데일리 인사이트 조회")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/daily")
     public ApiResponse<InsightDailyResponseDto> getDailyInsight(
@@ -35,5 +36,18 @@ public class InsightController {
         Long userId = (Long) authentication.getPrincipal();
         InsightDailyResponseDto response = insightService.getDailyInsight(userId, date);
         return ApiResponse.success("데일리 인사이트 조회가 완료되었습니다.", response);
+    }
+
+    @Operation(summary = "7.2 위클리 인사이트 조회")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/weekly")
+    public ApiResponse<InsightWeeklyResponseDto> getWeeklyInsight(
+            Authentication authentication,
+            @RequestParam(value = "weekStart", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        InsightWeeklyResponseDto response = insightService.getWeeklyInsight(userId, weekStart);
+        return ApiResponse.success("위클리 인사이트 조회가 완료되었습니다.", response);
     }
 }

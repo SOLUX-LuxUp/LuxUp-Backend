@@ -13,10 +13,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -183,5 +186,183 @@ public class InsightService {
                 .buttonTapCounts(List.of())
                 .timeline(List.of())
                 .build();
+    }
+
+    /**
+     * 10. 위클리 인사이트 조회
+     * - weekStart가 없으면 이번 주 월요일을 기본값으로 사용.
+     * - 요일 7개는 기록 유무와 무관하게 항상 다 채워서 반환한다(그래프가 7일치를 항상 보여줘야 하니까).
+     * - buttonTapCounts(그래프용)는 상위 5개만, topButton(요약카드용)은 5개 제한 없이 진짜 1위.
+     */
+    public InsightWeeklyResponseDto getWeeklyInsight(Long userId, LocalDate weekStart) {
+        LocalDate start = (weekStart != null)
+                ? weekStart
+                : LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate end = start.plusDays(6);
+
+        List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
+
+        List<ButtonRecord> records = buttonIds.isEmpty()
+                ? List.of()
+                : buttonRecordRepository.findRecordsInRange(buttonIds, start.atStartOfDay(), start.plusDays(7).atStartOfDay());
+
+        Map<Long, Button> buttonMap = buttonIds.isEmpty()
+                ? Map.of()
+                : buttonRepository.findAllById(buttonIds).stream().collect(Collectors.toMap(Button::getButtonId, b -> b));
+
+        List<DailyTapCountDto> dailyTapCounts = buildDailyTapCounts(records, buttonMap, start);
+
+        if (records.isEmpty()) {
+            PrevWeekComparisonDto prevWeekComparison = buildPrevWeekComparison(buttonIds, start, 0);
+            return InsightWeeklyResponseDto.builder()
+                    .weekStart(start.toString())
+                    .weekEnd(end.toString())
+                    .totalTapCount(0)
+                    .dailyTapCounts(dailyTapCounts)
+                    .categoryTapCounts(List.of())
+                    .buttonTapCounts(List.of())
+                    .peakDay(null)
+                    .peakTimeSlot(null)
+                    .topButton(null)
+                    .prevWeekComparison(prevWeekComparison)
+                    .build();
+        }
+
+        Map<Long, Long> categoryCounts = records.stream()
+                .filter(r -> buttonMap.get(r.getButtonId()) != null && buttonMap.get(r.getButtonId()).getCategoryId() != null)
+                .collect(Collectors.groupingBy(r -> buttonMap.get(r.getButtonId()).getCategoryId(), Collectors.counting()));
+        List<CategoryTapCountDto> categoryTapCounts = buildCategoryTapCounts(categoryCounts);
+
+        Map<Long, Long> buttonCounts = records.stream()
+                .collect(Collectors.groupingBy(ButtonRecord::getButtonId, Collectors.counting()));
+        long maxButtonCount = buttonCounts.values().stream().max(Long::compareTo).orElse(0L);
+
+        List<ButtonTapCountDto> buttonTapCounts = buttonCounts.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(5)
+                .map(e -> {
+                    Button btn = buttonMap.get(e.getKey());
+                    double ratio = (maxButtonCount == 0) ? 0.0 : Math.round((double) e.getValue() / maxButtonCount * 1000) / 1000.0;
+                    return ButtonTapCountDto.builder()
+                            .buttonId(btn.getButtonId())
+                            .buttonName(btn.getButtonName())
+                            .count(e.getValue().intValue())
+                            .ratio(ratio)
+                            .build();
+                })
+                .toList();
+
+        String peakDay = dailyTapCounts.stream()
+                .max(Comparator.comparingInt(DailyTapCountDto::getTotal))
+                .filter(d -> d.getTotal() > 0)
+                .map(d -> toKoreanDayName(LocalDate.parse(d.getDate()).getDayOfWeek()))
+                .orElse(null);
+
+        Map<String, Long> slotCounts = records.stream()
+                .collect(Collectors.groupingBy(r -> resolveTimeSlot(r.getRecordedAt().toLocalTime()), Collectors.counting()));
+        String peakTimeSlot = slotCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        Map.Entry<Long, Long> topEntry = buttonCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow();
+        Button topBtn = buttonMap.get(topEntry.getKey());
+        WeeklyTopButtonDto topButton = WeeklyTopButtonDto.builder()
+                .buttonId(topBtn.getButtonId())
+                .buttonName(topBtn.getButtonName())
+                .count(topEntry.getValue().intValue())
+                .build();
+
+        PrevWeekComparisonDto prevWeekComparison = buildPrevWeekComparison(buttonIds, start, records.size());
+
+        return InsightWeeklyResponseDto.builder()
+                .weekStart(start.toString())
+                .weekEnd(end.toString())
+                .totalTapCount(records.size())
+                .dailyTapCounts(dailyTapCounts)
+                .categoryTapCounts(categoryTapCounts)
+                .buttonTapCounts(buttonTapCounts)
+                .peakDay(peakDay)
+                .peakTimeSlot(peakTimeSlot)
+                .topButton(topButton)
+                .prevWeekComparison(prevWeekComparison)
+                .build();
+    }
+
+    private List<DailyTapCountDto> buildDailyTapCounts(List<ButtonRecord> records, Map<Long, Button> buttonMap, LocalDate weekStart) {
+        List<DailyTapCountDto> result = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = weekStart.plusDays(i);
+            List<ButtonRecord> dayRecords = records.stream()
+                    .filter(r -> r.getRecordedAt().toLocalDate().equals(day))
+                    .toList();
+
+            Map<Long, Integer> categoriesForDay = dayRecords.stream()
+                    .filter(r -> buttonMap.get(r.getButtonId()) != null && buttonMap.get(r.getButtonId()).getCategoryId() != null)
+                    .collect(Collectors.groupingBy(
+                            r -> buttonMap.get(r.getButtonId()).getCategoryId(),
+                            Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                    ));
+
+            result.add(DailyTapCountDto.builder()
+                    .date(day.toString())
+                    .total(dayRecords.size())
+                    .categories(categoriesForDay)
+                    .build());
+        }
+        return result;
+    }
+
+    private PrevWeekComparisonDto buildPrevWeekComparison(List<Long> buttonIds, LocalDate currentWeekStart, int currentTotal) {
+        LocalDate prevStart = currentWeekStart.minusWeeks(1);
+
+        List<ButtonRecord> prevRecords = buttonIds.isEmpty()
+                ? List.of()
+                : buttonRecordRepository.findRecordsInRange(buttonIds, prevStart.atStartOfDay(), prevStart.plusDays(7).atStartOfDay());
+
+        int prevTotal = prevRecords.size();
+
+        // 지난주 기록이 0이면 변화율을 나눗셈할 수 없으니 0으로 처리한다.
+        double changeRate = 0.0;
+        if (prevTotal > 0) {
+            changeRate = Math.round((double) (currentTotal - prevTotal) / prevTotal * 1000) / 1000.0;
+        }
+
+        WeeklyTopButtonDto prevTopButton = null;
+        if (!prevRecords.isEmpty()) {
+            Map<Long, Button> buttonMap = buttonRepository.findAllById(buttonIds).stream()
+                    .collect(Collectors.toMap(Button::getButtonId, b -> b));
+            Map<Long, Long> prevButtonCounts = prevRecords.stream()
+                    .collect(Collectors.groupingBy(ButtonRecord::getButtonId, Collectors.counting()));
+            Map.Entry<Long, Long> prevTopEntry = prevButtonCounts.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElseThrow();
+            Button prevTopBtn = buttonMap.get(prevTopEntry.getKey());
+            prevTopButton = WeeklyTopButtonDto.builder()
+                    .buttonId(prevTopBtn.getButtonId())
+                    .buttonName(prevTopBtn.getButtonName())
+                    .count(prevTopEntry.getValue().intValue())
+                    .build();
+        }
+
+        return PrevWeekComparisonDto.builder()
+                .prevTotalTapCount(prevTotal)
+                .changeRate(changeRate)
+                .prevTopButton(prevTopButton)
+                .build();
+    }
+
+    private String toKoreanDayName(DayOfWeek dayOfWeek) {
+        return switch (dayOfWeek) {
+            case MONDAY -> "월요일";
+            case TUESDAY -> "화요일";
+            case WEDNESDAY -> "수요일";
+            case THURSDAY -> "목요일";
+            case FRIDAY -> "금요일";
+            case SATURDAY -> "토요일";
+            case SUNDAY -> "일요일";
+        };
     }
 }
