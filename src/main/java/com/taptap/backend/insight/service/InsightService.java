@@ -411,7 +411,7 @@ public class InsightService {
         Map<String, Integer> dailyTapCounts = buildMonthlyDailyTapCounts(records, targetMonth);
 
         if (records.isEmpty()) {
-            PrevMonthComparisonDto prevMonthComparison = buildPrevMonthComparison(buttonIds, targetMonth, 0);
+            PrevMonthComparisonDto prevMonthComparison = buildPrevMonthComparison(buttonIds, targetMonth, 0, List.of(), Map.of());
             return InsightMonthlyResponseDto.builder()
                     .year(targetMonth.getYear())
                     .month(targetMonth.getMonthValue())
@@ -463,17 +463,7 @@ public class InsightService {
                 })
                 .toList();
 
-        List<RankedButtonDto> top3Buttons = new ArrayList<>();
-        for (int i = 0; i < Math.min(3, sortedButtonEntries.size()); i++) {
-            Map.Entry<Long, Long> e = sortedButtonEntries.get(i);
-            Button btn = buttonMap.get(e.getKey());
-            top3Buttons.add(RankedButtonDto.builder()
-                    .rank(i + 1)
-                    .buttonId(btn.getButtonId())
-                    .buttonName(btn.getButtonName())
-                    .count(e.getValue().intValue())
-                    .build());
-        }
+        List<RankedButtonDto> top3Buttons = buildRankedButtons(sortedButtonEntries, buttonMap, 3);
 
         // 가장 기록 많았던 날
         String busiestDay = dailyTapCounts.entrySet().stream()
@@ -493,7 +483,8 @@ public class InsightService {
         // 시간대별 최다 카테고리
         Map<String, TimeSlotCategoryEntryDto> timeSlotCategory = buildTimeSlotCategory(records, buttonMap);
 
-        PrevMonthComparisonDto prevMonthComparison = buildPrevMonthComparison(buttonIds, targetMonth, records.size());
+        PrevMonthComparisonDto prevMonthComparison =
+                buildPrevMonthComparison(buttonIds, targetMonth, records.size(), sortedButtonEntries, buttonMap);
 
         return InsightMonthlyResponseDto.builder()
                 .year(targetMonth.getYear())
@@ -593,7 +584,29 @@ public class InsightService {
         return result;
     }
 
-    private PrevMonthComparisonDto buildPrevMonthComparison(List<Long> buttonIds, YearMonth currentMonth, int currentTotal) {
+    private List<RankedButtonDto> buildRankedButtons(List<Map.Entry<Long, Long>> sortedEntries, Map<Long, Button> buttonMap, int limit) {
+        List<RankedButtonDto> result = new ArrayList<>();
+        for (int i = 0; i < Math.min(limit, sortedEntries.size()); i++) {
+            Map.Entry<Long, Long> e = sortedEntries.get(i);
+            Button btn = buttonMap.get(e.getKey());
+            result.add(RankedButtonDto.builder()
+                    .rank(i + 1)
+                    .buttonId(btn.getButtonId())
+                    .buttonName(btn.getButtonName())
+                    .count(e.getValue().intValue())
+                    .build());
+        }
+        return result;
+    }
+
+    /**
+     * currentSortedButtonEntries/currentButtonMap: 이미 getMonthlyInsight에서 계산해둔 "이번달" 버튼 집계를
+     * 그대로 재사용한다 (같은 데이터를 다시 쿼리하지 않으려고). 기록이 하나도 없는 달이면 빈 리스트/맵이 온다.
+     */
+    private PrevMonthComparisonDto buildPrevMonthComparison(
+            List<Long> buttonIds, YearMonth currentMonth, int currentTotal,
+            List<Map.Entry<Long, Long>> currentSortedButtonEntries, Map<Long, Button> currentButtonMap
+    ) {
         YearMonth prevMonth = currentMonth.minusMonths(1);
 
         List<ButtonRecord> prevRecords = buttonIds.isEmpty()
@@ -622,24 +635,16 @@ public class InsightService {
                     .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
                     .toList();
 
-            List<RankedButtonDto> ranked = new ArrayList<>();
-            for (int i = 0; i < Math.min(5, sortedPrev.size()); i++) {
-                Map.Entry<Long, Long> e = sortedPrev.get(i);
-                Button btn = buttonMap.get(e.getKey());
-                ranked.add(RankedButtonDto.builder()
-                        .rank(i + 1)
-                        .buttonId(btn.getButtonId())
-                        .buttonName(btn.getButtonName())
-                        .count(e.getValue().intValue())
-                        .build());
-            }
-            prevTop5Buttons = ranked;
+            prevTop5Buttons = buildRankedButtons(sortedPrev, buttonMap, 5);
         }
+
+        List<RankedButtonDto> currentTop5Buttons = buildRankedButtons(currentSortedButtonEntries, currentButtonMap, 5);
 
         return PrevMonthComparisonDto.builder()
                 .prevTotalTapCount(prevTotal)
                 .changeRate(changeRate)
                 .prevTop5Buttons(prevTop5Buttons)
+                .currentTop5Buttons(currentTop5Buttons)
                 .build();
     }
 }

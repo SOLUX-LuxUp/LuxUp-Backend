@@ -11,4 +11,5 @@ public class PrevMonthComparisonDto {
     private int prevTotalTapCount;
     private double changeRate;
     private List<RankedButtonDto> prevTop5Buttons;
+    private List<RankedButtonDto> currentTop5Buttons;
 }
