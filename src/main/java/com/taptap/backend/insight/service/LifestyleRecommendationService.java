@@ -57,7 +57,9 @@ public class LifestyleRecommendationService {
     private final GeminiClient geminiClient;
 
     /**
-     * 라이프스타일 라벨(규칙 기반, 매번 새로 계산) + 추천 목록(있으면 재사용, 없으면 AI로 새로 생성)
+     * 라이프스타일 라벨(규칙 기반, 매번 새로 계산) +
+     * ADD 추천(AI 필요 -> 있으면 재사용, 없으면 새로 생성) +
+     * DELETE 추천(AI 불필요, 쿼리만 하면 되니 -> 매번 라이브로 재계산해서 최신 상태 유지)
      */
     @Transactional
     public LifestyleRecommendationsResponseDto getRecommendations(Long userId) {
@@ -85,54 +87,110 @@ public class LifestyleRecommendationService {
 
         LifestyleLabel label = computeLifestyleLabel(thisMonthRecords, buttonMap, top5ButtonEntries);
 
-        List<LifestyleRecommendation> active = lifestyleRecommendationRepository.findActiveByUserId(userId);
-        active = revalidateDeleteRecommendations(active);
+        List<LifestyleRecommendation> allActive = lifestyleRecommendationRepository.findActiveByUserId(userId);
 
-        if (active.isEmpty()) {
-            active = generateRecommendations(userId, buttonIds, thisMonthRecords, buttonMap, top5ButtonEntries);
+        List<LifestyleRecommendation> activeAdd = allActive.stream()
+                .filter(r -> "ADD".equals(r.getRecType()))
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (activeAdd.isEmpty()) {
+            List<LifestyleRecommendation> newAdd = generateAddRecommendations(userId, thisMonthRecords, buttonMap, top5ButtonEntries);
+            activeAdd = newAdd.isEmpty() ? List.of() : lifestyleRecommendationRepository.saveAll(newAdd);
         }
+
+        List<LifestyleRecommendation> existingDelete = allActive.stream()
+                .filter(r -> "DELETE".equals(r.getRecType()))
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<LifestyleRecommendation> activeDelete = refreshDeleteRecommendations(userId, buttonIds, existingDelete);
+
+        List<LifestyleRecommendationDto> recommendations = new ArrayList<>();
+        activeAdd.forEach(r -> recommendations.add(toDto(r)));
+        activeDelete.forEach(r -> recommendations.add(toDto(r)));
 
         return LifestyleRecommendationsResponseDto.builder()
                 .lifestyleLabel(label.getLabelName())
                 .lifestyleCaption(label.getCaption())
                 .analysisButtons(analysisButtons)
-                .recommendations(active.stream().map(this::toDto).toList())
+                .recommendations(recommendations)
                 .build();
     }
 
     /**
-     * DELETE 추천 중, 대상 버튼이 이미 비활성화됐거나(다른 경로로 삭제됨)
-     * 추천 생성 이후 다시 사용된 경우, AI를 다시 부르지 않고 자동으로 거절(dismiss) 처리해서
-     * 이번 응답에서 제외한다. (거절 처리라 다음부턴 findActiveByUserId에서도 자동으로 빠짐)
+     * DELETE 추천은 AI가 필요 없는 순수 쿼리라, 캐시하지 않고 매번 라이브로 다시 계산한다.
+     * - 더 이상 조건에 안 맞는(다시 쓰였거나, 다른 경로로 비활성화된) 기존 추천은 자동 거절 처리.
+     * - 새로 조건을 만족하게 된 버튼은 새 추천으로 추가.
+     * - 여전히 유효한 기존 추천은 중복 생성하지 않고 그대로 재사용.
+     * - 최종적으로 오래된 것부터 상위 3개만 반환.
      */
-    private List<LifestyleRecommendation> revalidateDeleteRecommendations(List<LifestyleRecommendation> recs) {
-        List<LifestyleRecommendation> stillValid = new ArrayList<>();
+    private List<LifestyleRecommendation> refreshDeleteRecommendations(
+            Long userId, List<Long> buttonIds, List<LifestyleRecommendation> existingDelete
+    ) {
+        if (buttonIds.isEmpty()) {
+            existingDelete.forEach(LifestyleRecommendation::dismiss);
+            return List.of();
+        }
 
-        for (LifestyleRecommendation rec : recs) {
-            if (!"DELETE".equals(rec.getRecType()) || rec.getTargetButtonId() == null) {
-                stillValid.add(rec);
-                continue;
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        List<Button> buttons = buttonRepository.findAllById(buttonIds);
+
+        Map<Long, LifestyleRecommendation> existingByButton = existingDelete.stream()
+                .collect(Collectors.toMap(LifestyleRecommendation::getTargetButtonId, r -> r));
+
+        // 지금 이 순간 기준으로 "미사용 1달 이상"인 버튼들을 다시 계산
+        List<Map.Entry<Button, LocalDateTime>> candidates = new ArrayList<>();
+        for (Button button : buttons) {
+            Optional<ButtonRecord> latest = buttonRecordRepository
+                    .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(button.getButtonId());
+            LocalDateTime referenceTime = latest.map(ButtonRecord::getRecordedAt).orElse(button.getCreatedAt());
+            if (referenceTime.isBefore(oneMonthAgo)) {
+                candidates.add(Map.entry(button, referenceTime));
             }
+        }
+        Set<Long> candidateButtonIds = candidates.stream()
+                .map(e -> e.getKey().getButtonId())
+                .collect(Collectors.toSet());
 
-            Button button = buttonRepository.findById(rec.getTargetButtonId()).orElse(null);
-            boolean stale = (button == null || !Boolean.TRUE.equals(button.getIsActive()));
-
-            if (!stale) {
-                Optional<ButtonRecord> latest = buttonRecordRepository
-                        .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(rec.getTargetButtonId());
-                if (latest.isPresent() && latest.get().getRecordedAt().isAfter(rec.getCreatedAt())) {
-                    stale = true; // 추천 생성 이후 다시 사용됨 -> 더 이상 "잊어가는 버튼"이 아님
-                }
-            }
-
-            if (stale) {
-                rec.dismiss(); // 관리 중인 엔티티라 save() 없이도 트랜잭션 커밋 시 자동 반영됨
-            } else {
-                stillValid.add(rec);
+        // 더 이상 후보가 아닌 기존 추천(다시 쓰였거나 비활성화됨)은 자동 거절
+        for (LifestyleRecommendation existing : existingDelete) {
+            if (!candidateButtonIds.contains(existing.getTargetButtonId())) {
+                existing.dismiss();
             }
         }
 
-        return stillValid;
+        List<Map.Entry<Button, LocalDateTime>> topCandidates = candidates.stream()
+                .sorted(Comparator.comparing(Map.Entry::getValue)) // 오래된 것부터
+                .limit(DELETE_RECOMMENDATION_COUNT)
+                .toList();
+
+        List<LifestyleRecommendation> result = new ArrayList<>();
+        List<LifestyleRecommendation> toSave = new ArrayList<>();
+
+        for (Map.Entry<Button, LocalDateTime> entry : topCandidates) {
+            Long buttonId = entry.getKey().getButtonId();
+            LifestyleRecommendation existing = existingByButton.get(buttonId);
+
+            boolean reusable = existing != null
+                    && !Boolean.TRUE.equals(existing.getIsDismissed())
+                    && !Boolean.TRUE.equals(existing.getIsAccepted());
+
+            if (reusable) {
+                result.add(existing);
+            } else {
+                toSave.add(LifestyleRecommendation.builder()
+                        .userId(userId)
+                        .recType("DELETE")
+                        .targetButtonId(buttonId)
+                        .isAccepted(false)
+                        .isDismissed(false)
+                        .expiresAt(LocalDateTime.now().plusDays(RECOMMENDATION_VALID_DAYS))
+                        .build());
+            }
+        }
+
+        if (!toSave.isEmpty()) {
+            result.addAll(lifestyleRecommendationRepository.saveAll(toSave));
+        }
+
+        return result;
     }
 
     /**
@@ -402,20 +460,6 @@ public class LifestyleRecommendationService {
 
     // ================= 추천 생성 =================
 
-    private List<LifestyleRecommendation> generateRecommendations(
-            Long userId, List<Long> buttonIds, List<ButtonRecord> thisMonthRecords,
-            Map<Long, Button> buttonMap, List<Map.Entry<Long, Long>> top5ButtonEntries
-    ) {
-        List<LifestyleRecommendation> newRecs = new ArrayList<>();
-        newRecs.addAll(generateAddRecommendations(userId, thisMonthRecords, buttonMap, top5ButtonEntries));
-        newRecs.addAll(generateDeleteRecommendations(userId, buttonIds));
-
-        if (newRecs.isEmpty()) {
-            return List.of();
-        }
-        return lifestyleRecommendationRepository.saveAll(newRecs);
-    }
-
     /**
      * 이번 달 top5 버튼 정보를 AI에게 알려주고, 새 버튼 이름을 최대 5개 추천받는다.
      * AI 호출이 실패하거나 응답이 이상하면, 그냥 빈 리스트를 반환한다 (전체를 막지 않음).
@@ -459,41 +503,8 @@ public class LifestyleRecommendationService {
      * 마지막 사용(기록)으로부터 1달이 지난 활성 버튼들 중, 가장 오래된 것부터 상위 3개만 삭제 제안으로 만든다.
      * 기록이 아예 없는 버튼은, 생성된 지 1달이 넘었을 때만 대상으로 삼는다(막 만든 새 버튼 오탐 방지).
      */
-    private List<LifestyleRecommendation> generateDeleteRecommendations(Long userId, List<Long> buttonIds) {
-        if (buttonIds.isEmpty()) {
-            return List.of();
-        }
-
-        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
-        List<Button> buttons = buttonRepository.findAllById(buttonIds);
-
-        // (버튼, 마지막 활동 기준 시각) 쌍을 모아서 오래된 순으로 정렬한다.
-        List<Map.Entry<Button, LocalDateTime>> unusedCandidates = new ArrayList<>();
-        for (Button button : buttons) {
-            Optional<ButtonRecord> latest = buttonRecordRepository
-                    .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(button.getButtonId());
-
-            LocalDateTime referenceTime = latest.map(ButtonRecord::getRecordedAt).orElse(button.getCreatedAt());
-            boolean unused = referenceTime.isBefore(oneMonthAgo);
-
-            if (unused) {
-                unusedCandidates.add(Map.entry(button, referenceTime));
-            }
-        }
-
-        return unusedCandidates.stream()
-                .sorted(Comparator.comparing(Map.Entry::getValue)) // 오래된 것(과거 시각)부터
-                .limit(DELETE_RECOMMENDATION_COUNT)
-                .map(entry -> LifestyleRecommendation.builder()
-                        .userId(userId)
-                        .recType("DELETE")
-                        .targetButtonId(entry.getKey().getButtonId())
-                        .isAccepted(false)
-                        .isDismissed(false)
-                        .expiresAt(LocalDateTime.now().plusDays(RECOMMENDATION_VALID_DAYS))
-                        .build())
-                .toList();
-    }
+    // (참고: DELETE 추천 생성은 이제 refreshDeleteRecommendations()에서 매번 라이브로 처리한다.
+    //  AI가 필요 없는 순수 쿼리라 캐시할 이유가 없어서, ADD와 다르게 매번 재계산한다.)
 
     private String describeButton(Button button) {
         String categoryName = resolveCategoryName(button.getCategoryId());
