@@ -86,6 +86,8 @@ public class LifestyleRecommendationService {
         LifestyleLabel label = computeLifestyleLabel(thisMonthRecords, buttonMap, top5ButtonEntries);
 
         List<LifestyleRecommendation> active = lifestyleRecommendationRepository.findActiveByUserId(userId);
+        active = revalidateDeleteRecommendations(active);
+
         if (active.isEmpty()) {
             active = generateRecommendations(userId, buttonIds, thisMonthRecords, buttonMap, top5ButtonEntries);
         }
@@ -96,6 +98,41 @@ public class LifestyleRecommendationService {
                 .analysisButtons(analysisButtons)
                 .recommendations(active.stream().map(this::toDto).toList())
                 .build();
+    }
+
+    /**
+     * DELETE 추천 중, 대상 버튼이 이미 비활성화됐거나(다른 경로로 삭제됨)
+     * 추천 생성 이후 다시 사용된 경우, AI를 다시 부르지 않고 자동으로 거절(dismiss) 처리해서
+     * 이번 응답에서 제외한다. (거절 처리라 다음부턴 findActiveByUserId에서도 자동으로 빠짐)
+     */
+    private List<LifestyleRecommendation> revalidateDeleteRecommendations(List<LifestyleRecommendation> recs) {
+        List<LifestyleRecommendation> stillValid = new ArrayList<>();
+
+        for (LifestyleRecommendation rec : recs) {
+            if (!"DELETE".equals(rec.getRecType()) || rec.getTargetButtonId() == null) {
+                stillValid.add(rec);
+                continue;
+            }
+
+            Button button = buttonRepository.findById(rec.getTargetButtonId()).orElse(null);
+            boolean stale = (button == null || !Boolean.TRUE.equals(button.getIsActive()));
+
+            if (!stale) {
+                Optional<ButtonRecord> latest = buttonRecordRepository
+                        .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(rec.getTargetButtonId());
+                if (latest.isPresent() && latest.get().getRecordedAt().isAfter(rec.getCreatedAt())) {
+                    stale = true; // 추천 생성 이후 다시 사용됨 -> 더 이상 "잊어가는 버튼"이 아님
+                }
+            }
+
+            if (stale) {
+                rec.dismiss(); // 관리 중인 엔티티라 save() 없이도 트랜잭션 커밋 시 자동 반영됨
+            } else {
+                stillValid.add(rec);
+            }
+        }
+
+        return stillValid;
     }
 
     /**
