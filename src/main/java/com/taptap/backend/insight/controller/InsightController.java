@@ -2,6 +2,7 @@ package com.taptap.backend.insight.controller;
 
 import com.taptap.backend.config.ApiResponse;
 import com.taptap.backend.insight.dto.InsightDailyResponseDto;
+import com.taptap.backend.insight.dto.InsightMonthlyResponseDto;
 import com.taptap.backend.insight.dto.InsightWeeklyResponseDto;
 import com.taptap.backend.insight.service.InsightService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,5 +50,18 @@ public class InsightController {
         Long userId = (Long) authentication.getPrincipal();
         InsightWeeklyResponseDto response = insightService.getWeeklyInsight(userId, weekStart);
         return ApiResponse.success("위클리 인사이트 조회가 완료되었습니다.", response);
+    }
+
+    @Operation(summary = "7.3 먼슬리 인사이트 조회")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/monthly")
+    public ApiResponse<InsightMonthlyResponseDto> getMonthlyInsight(
+            Authentication authentication,
+            @RequestParam(value = "year", required = false) Integer year,
+            @RequestParam(value = "month", required = false) Integer month
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        InsightMonthlyResponseDto response = insightService.getMonthlyInsight(userId, year, month);
+        return ApiResponse.success("먼슬리 인사이트 조회가 완료되었습니다.", response);
     }
 }

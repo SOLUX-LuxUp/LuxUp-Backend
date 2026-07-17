@@ -5,9 +5,9 @@ import lombok.Getter;
 
 @Getter
 @Builder
-public class CategoryTapCountDto {
-    private Long categoryId;
-    private String categoryName;
+public class RankedButtonDto {
+    private int rank;
+    private Long buttonId;
+    private String buttonName;
     private int count;
-    private double ratio;
 }

@@ -17,9 +17,12 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -140,10 +143,17 @@ public class InsightService {
                 .build();
     }
 
+    /**
+     * ratio는 "카테고리가 매겨진 기록들의 합" 대비 비율이다 (전체 totalTapCount 대비가 아님).
+     * 카테고리 없는 버튼의 기록은 애초에 categoryCounts에 안 들어오니, 이렇게 계산해야
+     * 프론트에서 ratio들을 다 더했을 때 정확히 1.0(100%)이 된다.
+     */
     private List<CategoryTapCountDto> buildCategoryTapCounts(Map<Long, Long> categoryCounts) {
         if (categoryCounts.isEmpty()) {
             return List.of();
         }
+
+        long totalCategorized = categoryCounts.values().stream().mapToLong(Long::longValue).sum();
 
         Map<Long, ButtonCategory> categoryMap = buttonCategoryRepository.findAllById(categoryCounts.keySet()).stream()
                 .collect(Collectors.toMap(ButtonCategory::getCategoryId, c -> c));
@@ -154,10 +164,13 @@ public class InsightService {
             if (category == null) {
                 continue;
             }
+            double ratio = (totalCategorized == 0) ? 0.0
+                    : Math.round((double) entry.getValue() / totalCategorized * 1000) / 1000.0;
             result.add(CategoryTapCountDto.builder()
                     .categoryId(category.getCategoryId())
                     .categoryName(category.getCategoryName())
                     .count(entry.getValue().intValue())
+                    .ratio(ratio)
                     .build());
         }
         result.sort((a, b) -> b.getCount() - a.getCount());
@@ -364,5 +377,269 @@ public class InsightService {
             case SATURDAY -> "토요일";
             case SUNDAY -> "일요일";
         };
+    }
+
+    /**
+     * 11. 먼슬리 인사이트 조회 (통계 부분만. 라이프스타일 추천은 /api/lifestyle-recommendations로 분리)
+     * - year/month가 없으면 이번 달을 기본값으로 사용.
+     * - dailyTapCounts는 그 달의 모든 날짜를 항상 포함한다(기록 없는 날은 0), 히트맵이 매달 같은 형태로 그려져야 하니까.
+     * - buttonTapCounts는 위클리와 달리 5개로 안 자르고 전체를 내림차순으로 반환한다(명세서 기준).
+     */
+    public InsightMonthlyResponseDto getMonthlyInsight(Long userId, Integer year, Integer month) {
+        if (month != null && (month < 1 || month > 12)) {
+            throw new ButtonException(HttpStatus.BAD_REQUEST, "월(month)은 1~12 사이여야 합니다.");
+        }
+
+        YearMonth targetMonth = (year != null && month != null)
+                ? YearMonth.of(year, month)
+                : YearMonth.now();
+
+        List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
+
+        List<ButtonRecord> records = buttonIds.isEmpty()
+                ? List.of()
+                : buttonRecordRepository.findRecordsInRange(
+                buttonIds,
+                targetMonth.atDay(1).atStartOfDay(),
+                targetMonth.plusMonths(1).atDay(1).atStartOfDay()
+        );
+
+        Map<Long, Button> buttonMap = buttonIds.isEmpty()
+                ? Map.of()
+                : buttonRepository.findAllById(buttonIds).stream().collect(Collectors.toMap(Button::getButtonId, b -> b));
+
+        Map<String, Integer> dailyTapCounts = buildMonthlyDailyTapCounts(records, targetMonth);
+
+        if (records.isEmpty()) {
+            PrevMonthComparisonDto prevMonthComparison = buildPrevMonthComparison(buttonIds, targetMonth, 0);
+            return InsightMonthlyResponseDto.builder()
+                    .year(targetMonth.getYear())
+                    .month(targetMonth.getMonthValue())
+                    .totalTapCount(0)
+                    .dailyTapCounts(dailyTapCounts)
+                    .categoryTapCounts(List.of())
+                    .buttonTapCounts(List.of())
+                    .top3Buttons(List.of())
+                    .topCategory(null)
+                    .busiestDay(null)
+                    .weekdayRatio(0.0)
+                    .weekendRatio(0.0)
+                    .timeSlotCategory(buildTimeSlotCategory(records, buttonMap))
+                    .prevMonthComparison(prevMonthComparison)
+                    .build();
+        }
+
+        // 카테고리별 집계
+        Map<Long, Long> categoryCounts = records.stream()
+                .filter(r -> buttonMap.get(r.getButtonId()) != null && buttonMap.get(r.getButtonId()).getCategoryId() != null)
+                .collect(Collectors.groupingBy(r -> buttonMap.get(r.getButtonId()).getCategoryId(), Collectors.counting()));
+        List<CategoryTapCountDto> categoryTapCounts = buildCategoryTapCounts(categoryCounts);
+        TopCategoryDto topCategory = categoryTapCounts.isEmpty() ? null
+                : TopCategoryDto.builder()
+                .categoryId(categoryTapCounts.get(0).getCategoryId())
+                .categoryName(categoryTapCounts.get(0).getCategoryName())
+                .count(categoryTapCounts.get(0).getCount())
+                .build();
+
+        // 버튼별 집계 (전체, 내림차순)
+        Map<Long, Long> buttonCounts = records.stream()
+                .collect(Collectors.groupingBy(ButtonRecord::getButtonId, Collectors.counting()));
+        long maxButtonCount = buttonCounts.values().stream().max(Long::compareTo).orElse(0L);
+
+        List<Map.Entry<Long, Long>> sortedButtonEntries = buttonCounts.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .toList();
+
+        List<ButtonTapCountDto> buttonTapCounts = sortedButtonEntries.stream()
+                .map(e -> {
+                    Button btn = buttonMap.get(e.getKey());
+                    double ratio = (maxButtonCount == 0) ? 0.0 : Math.round((double) e.getValue() / maxButtonCount * 1000) / 1000.0;
+                    return ButtonTapCountDto.builder()
+                            .buttonId(btn.getButtonId())
+                            .buttonName(btn.getButtonName())
+                            .count(e.getValue().intValue())
+                            .ratio(ratio)
+                            .build();
+                })
+                .toList();
+
+        List<RankedButtonDto> top3Buttons = new ArrayList<>();
+        for (int i = 0; i < Math.min(3, sortedButtonEntries.size()); i++) {
+            Map.Entry<Long, Long> e = sortedButtonEntries.get(i);
+            Button btn = buttonMap.get(e.getKey());
+            top3Buttons.add(RankedButtonDto.builder()
+                    .rank(i + 1)
+                    .buttonId(btn.getButtonId())
+                    .buttonName(btn.getButtonName())
+                    .count(e.getValue().intValue())
+                    .build());
+        }
+
+        // 가장 기록 많았던 날
+        String busiestDay = dailyTapCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .filter(e -> e.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        // 주중/주말 비율
+        long weekdayCount = records.stream()
+                .filter(r -> !isWeekend(r.getRecordedAt().toLocalDate()))
+                .count();
+        long weekendCount = records.size() - weekdayCount;
+        double weekdayRatio = Math.round((double) weekdayCount / records.size() * 1000) / 1000.0;
+        double weekendRatio = Math.round((double) weekendCount / records.size() * 1000) / 1000.0;
+
+        // 시간대별 최다 카테고리
+        Map<String, TimeSlotCategoryEntryDto> timeSlotCategory = buildTimeSlotCategory(records, buttonMap);
+
+        PrevMonthComparisonDto prevMonthComparison = buildPrevMonthComparison(buttonIds, targetMonth, records.size());
+
+        return InsightMonthlyResponseDto.builder()
+                .year(targetMonth.getYear())
+                .month(targetMonth.getMonthValue())
+                .totalTapCount(records.size())
+                .dailyTapCounts(dailyTapCounts)
+                .categoryTapCounts(categoryTapCounts)
+                .buttonTapCounts(buttonTapCounts)
+                .top3Buttons(top3Buttons)
+                .topCategory(topCategory)
+                .busiestDay(busiestDay)
+                .weekdayRatio(weekdayRatio)
+                .weekendRatio(weekendRatio)
+                .timeSlotCategory(timeSlotCategory)
+                .prevMonthComparison(prevMonthComparison)
+                .build();
+    }
+
+    private Map<String, Integer> buildMonthlyDailyTapCounts(List<ButtonRecord> records, YearMonth targetMonth) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        int daysInMonth = targetMonth.lengthOfMonth();
+        for (int day = 1; day <= daysInMonth; day++) {
+            result.put(targetMonth.atDay(day).toString(), 0);
+        }
+        for (ButtonRecord record : records) {
+            String key = record.getRecordedAt().toLocalDate().toString();
+            result.merge(key, 1, Integer::sum);
+        }
+        return result;
+    }
+
+    private boolean isWeekend(LocalDate date) {
+        DayOfWeek day = date.getDayOfWeek();
+        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+    }
+
+    /**
+     * 5개 시간대(새벽/아침/점심/저녁/밤)를 항상 다 포함해서 반환한다 (기록 없는 시간대도 count=0, ratio=0.0으로).
+     * 각 시간대마다:
+     * - count/ratio: 그 시간대에 전체 기록 중 몇 건/몇 %가 있었는지 (피그마의 "9%, 28%..." 그래프용)
+     * - categoryId/categoryName: 그 시간대에서 제일 많이 눌린 카테고리 (카테고리 태그된 기록이 하나도 없으면 null)
+     */
+    private Map<String, TimeSlotCategoryEntryDto> buildTimeSlotCategory(List<ButtonRecord> records, Map<Long, Button> buttonMap) {
+        List<String> slotOrder = List.of("새벽", "아침", "점심", "저녁", "밤");
+
+        Map<String, Long> slotTotalCounts = new HashMap<>();
+        Map<String, Map<Long, Long>> slotCategoryCounts = new HashMap<>();
+
+        for (ButtonRecord record : records) {
+            String slot = resolveTimeSlot(record.getRecordedAt().toLocalTime());
+            slotTotalCounts.merge(slot, 1L, Long::sum);
+
+            Button button = buttonMap.get(record.getButtonId());
+            if (button != null && button.getCategoryId() != null) {
+                slotCategoryCounts
+                        .computeIfAbsent(slot, s -> new HashMap<>())
+                        .merge(button.getCategoryId(), 1L, Long::sum);
+            }
+        }
+
+        int totalCount = records.size();
+
+        Map<Long, ButtonCategory> categoryMap = buttonCategoryRepository.findAllById(
+                slotCategoryCounts.values().stream()
+                        .flatMap(m -> m.keySet().stream())
+                        .collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(ButtonCategory::getCategoryId, c -> c));
+
+        Map<String, TimeSlotCategoryEntryDto> result = new LinkedHashMap<>();
+        for (String slot : slotOrder) {
+            long slotCount = slotTotalCounts.getOrDefault(slot, 0L);
+            double ratio = (totalCount == 0) ? 0.0 : Math.round((double) slotCount / totalCount * 1000) / 1000.0;
+
+            Long topCategoryId = null;
+            String topCategoryName = null;
+            Map<Long, Long> catCounts = slotCategoryCounts.get(slot);
+            if (catCounts != null && !catCounts.isEmpty()) {
+                Map.Entry<Long, Long> topCategoryEntry = catCounts.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .orElse(null);
+                if (topCategoryEntry != null) {
+                    ButtonCategory category = categoryMap.get(topCategoryEntry.getKey());
+                    if (category != null) {
+                        topCategoryId = category.getCategoryId();
+                        topCategoryName = category.getCategoryName();
+                    }
+                }
+            }
+
+            result.put(slot, TimeSlotCategoryEntryDto.builder()
+                    .count((int) slotCount)
+                    .ratio(ratio)
+                    .categoryId(topCategoryId)
+                    .categoryName(topCategoryName)
+                    .build());
+        }
+        return result;
+    }
+
+    private PrevMonthComparisonDto buildPrevMonthComparison(List<Long> buttonIds, YearMonth currentMonth, int currentTotal) {
+        YearMonth prevMonth = currentMonth.minusMonths(1);
+
+        List<ButtonRecord> prevRecords = buttonIds.isEmpty()
+                ? List.of()
+                : buttonRecordRepository.findRecordsInRange(
+                buttonIds,
+                prevMonth.atDay(1).atStartOfDay(),
+                prevMonth.plusMonths(1).atDay(1).atStartOfDay()
+        );
+
+        int prevTotal = prevRecords.size();
+
+        double changeRate = 0.0;
+        if (prevTotal > 0) {
+            changeRate = Math.round((double) (currentTotal - prevTotal) / prevTotal * 1000) / 1000.0;
+        }
+
+        List<RankedButtonDto> prevTop5Buttons = List.of();
+        if (!prevRecords.isEmpty()) {
+            Map<Long, Button> buttonMap = buttonRepository.findAllById(buttonIds).stream()
+                    .collect(Collectors.toMap(Button::getButtonId, b -> b));
+            Map<Long, Long> prevButtonCounts = prevRecords.stream()
+                    .collect(Collectors.groupingBy(ButtonRecord::getButtonId, Collectors.counting()));
+
+            List<Map.Entry<Long, Long>> sortedPrev = prevButtonCounts.entrySet().stream()
+                    .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                    .toList();
+
+            List<RankedButtonDto> ranked = new ArrayList<>();
+            for (int i = 0; i < Math.min(5, sortedPrev.size()); i++) {
+                Map.Entry<Long, Long> e = sortedPrev.get(i);
+                Button btn = buttonMap.get(e.getKey());
+                ranked.add(RankedButtonDto.builder()
+                        .rank(i + 1)
+                        .buttonId(btn.getButtonId())
+                        .buttonName(btn.getButtonName())
+                        .count(e.getValue().intValue())
+                        .build());
+            }
+            prevTop5Buttons = ranked;
+        }
+
+        return PrevMonthComparisonDto.builder()
+                .prevTotalTapCount(prevTotal)
+                .changeRate(changeRate)
+                .prevTop5Buttons(prevTop5Buttons)
+                .build();
     }
 }
