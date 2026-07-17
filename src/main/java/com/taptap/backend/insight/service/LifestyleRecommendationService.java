@@ -43,8 +43,9 @@ public class LifestyleRecommendationService {
     private static final double REGULAR_TIME_SLOT_CONCENTRATION_THRESHOLD = 0.7; // 규칙적인 기억
     private static final int CONSISTENT_DAYS_THRESHOLD = 20;   // 꾸준한 기억: 최근 30일 중 20일 이상
     private static final int CONSISTENT_STREAK_THRESHOLD = 7;  // 꾸준한 기억: 7일 연속
-    private static final double MOM_DAILY_AVG_THRESHOLD = 5.0; // 꼼꼼한 기억: 일평균 5회 이상
-    private static final double MOM_TOP5_SHARE_THRESHOLD = 0.7; // 꼼꼼한 기억: top5가 전체의 70% 미만이어야(=고르게 사용)
+    private static final double MOM_DAILY_AVG_THRESHOLD = 5.0; // 꼼꼼한 기억 "후보" 조건: 일평균 5회 이상
+    private static final double MOM_TOP5_SHARE_THRESHOLD = 0.7; // 꼼꼼한 기억 "후보" 조건: top5가 전체의 70% 미만(=고르게 사용)
+    private static final double MOM_OVERRIDE_DAILY_AVG_THRESHOLD = 20.0; // 카테고리가 있어도 이 이상이면 균형보다 꼼꼼 우선(기획서 예시)
     private static final double BALANCED_MAX_CATEGORY_RATIO_THRESHOLD = 0.5; // 균형적인 기억: 1위 카테고리 비중 50% 미만
     private static final double FOCUSED_TOP_BUTTON_RATIO_THRESHOLD = 0.4; // 집중하는 기억: top1 버튼 비중 40% 이상
     private static final double FOCUSED_TOP_CATEGORY_RATIO_THRESHOLD = 0.6; // 집중하는 기억: top1 카테고리 비중 60% 이상
@@ -213,16 +214,46 @@ public class LifestyleRecommendationService {
         if (isConsistent(thisMonthRecords)) {
             return LifestyleLabel.CONSISTENT;
         }
-        if (isMeticulous(thisMonthRecords, top5ButtonEntries)) {
-            return LifestyleLabel.METICULOUS;
+
+        LifestyleLabel balancedOrMeticulous = resolveBalancedOrMeticulous(thisMonthRecords, buttonMap, top5ButtonEntries);
+        if (balancedOrMeticulous != null) {
+            return balancedOrMeticulous;
         }
-        if (isBalanced(thisMonthRecords, buttonMap)) {
-            return LifestyleLabel.BALANCED;
-        }
+
         if (isFocused(thisMonthRecords, buttonMap)) {
             return LifestyleLabel.FOCUSED;
         }
         return LifestyleLabel.DIVERSE;
+    }
+
+    /**
+     * 기획서 부가설명 3줄을 정리한 규칙:
+     * - 카테고리가 아예 없으면 → 균형은 후보가 될 수 없으니, 꼼꼼 후보 조건만 본다.
+     * - 카테고리가 있으면 → 기본은 균형이 꼼꼼보다 우선인데,
+     *   단 하루 평균 사용량이 "압도적으로" 높으면(기획서 예시: 20회 이상) 그때는 꼼꼼이 뒤집는다.
+     * 둘 다 후보 조건을 만족 못 하면 null을 반환해서, 다음 순위(집중하는 기억)로 넘어가게 한다.
+     */
+    private LifestyleLabel resolveBalancedOrMeticulous(
+            List<ButtonRecord> records, Map<Long, Button> buttonMap, List<Map.Entry<Long, Long>> top5ButtonEntries
+    ) {
+        boolean meticulousCandidate = isMeticulous(records, top5ButtonEntries);
+        boolean hasCategory = records.stream()
+                .anyMatch(r -> buttonMap.get(r.getButtonId()) != null && buttonMap.get(r.getButtonId()).getCategoryId() != null);
+
+        if (!hasCategory) {
+            return meticulousCandidate ? LifestyleLabel.METICULOUS : null;
+        }
+
+        boolean balancedCandidate = isBalanced(records, buttonMap);
+        if (balancedCandidate) {
+            double dailyAvg = (double) records.size() / LocalDate.now().getDayOfMonth();
+            if (dailyAvg >= MOM_OVERRIDE_DAILY_AVG_THRESHOLD) {
+                return LifestyleLabel.METICULOUS; // 사용량이 압도적으로 높으면 균형을 뒤집는다
+            }
+            return LifestyleLabel.BALANCED;
+        }
+
+        return meticulousCandidate ? LifestyleLabel.METICULOUS : null;
     }
 
     /** top5 버튼 중 하나라도, 그 버튼 기록의 특정 시간대 집중도가 70% 이상이면 "규칙적" */
