@@ -44,4 +44,13 @@ public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long
             @Param("cursor") Long cursor,
             Pageable pageable
     );
+
+    // 9~11. 인사이트 - 여러 버튼의 특정 기간(start 이상 ~ end 미만) 기록, 최신순
+    @Query("SELECT br FROM ButtonRecord br WHERE br.buttonId IN :buttonIds AND br.deletedAt IS NULL " +
+            "AND br.recordedAt >= :start AND br.recordedAt < :end ORDER BY br.recordedAt DESC")
+    List<ButtonRecord> findRecordsInRange(
+            @Param("buttonIds") List<Long> buttonIds,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }
