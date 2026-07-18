@@ -9,6 +9,7 @@ import com.taptap.backend.insight.client.GeminiClient;
 import com.taptap.backend.insight.dto.*;
 import com.taptap.backend.insight.entity.LifestyleRecommendation;
 import com.taptap.backend.insight.repository.LifestyleRecommendationRepository;
+import com.taptap.backend.insight.util.TimeSlotResolver;
 import com.taptap.backend.record.entity.ButtonRecord;
 import com.taptap.backend.record.repository.ButtonRecordRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,12 +39,18 @@ public class LifestyleRecommendationService {
     private static final List<String> COLOR_CANDIDATES = List.of(
             "red", "orange", "yellow", "green", "cyan", "blue", "indigo", "purple", "pink", "grey", "darkgrey", "black"
     );
-    private static final int RECOMMENDATION_VALID_DAYS = 7; // ADD 추천 리셋 주기. 상수 하나만 바꾸면 됨 (현재 일주일 단위)
+    private static final int RECOMMENDATION_VALID_DAYS = 30; // ADD 추천 만료 여유값(안전망 용도, 실제 재생성 기준은 "이번 달에 이미 만들었는지"임)
     private static final int ADD_RECOMMENDATION_COUNT = 5;
     private static final int DELETE_RECOMMENDATION_COUNT = 3;
 
-    private static final int REGULAR_MIN_TAP_COUNT = 3; // 규칙적인 기억: 간격 판단하려면 최소 3번(간격 2개)은 있어야 함
-    private static final double REGULAR_INTERVAL_CV_THRESHOLD = 0.3; // 규칙적인 기억: 탭 간격의 변동계수 30% 이하면 "규칙적"
+    // 기획 확정 (신규): 라이프스타일 분석/AI 추천 활성화 조건
+    private static final int ANALYSIS_MIN_DAYS = 7;          // 라이프스타일 분석(라벨) 활성화: 이번 달 기록한 날이 7일 이상
+    private static final int ANALYSIS_MIN_TAP_COUNT = 20;    // 라이프스타일 분석(라벨) 활성화: 이번 달 총 기록이 20회 이상
+    private static final int AI_RECOMMENDATION_START_DAY_OF_MONTH = 20; // AI 버튼 추천(ADD)은 매달 20일이 지나야 활성화
+
+    private static final int REGULAR_MIN_TAP_COUNT = 3; // 규칙적인 기억(간격): 간격 판단하려면 최소 3번(간격 2개)은 있어야 함
+    private static final double REGULAR_INTERVAL_CV_THRESHOLD = 0.3; // 규칙적인 기억(간격): 탭 간격의 변동계수 30% 이하면 "규칙적"
+    private static final double REGULAR_TIME_SLOT_CONCENTRATION_THRESHOLD = 0.7; // 규칙적인 기억(시간대): 특정 시간대 집중도 70% 이상
     private static final int CONSISTENT_DAYS_THRESHOLD = 20;   // 꾸준한 기억: 최근 30일 중 20일 이상
     private static final int CONSISTENT_STREAK_THRESHOLD = 7;  // 꾸준한 기억: 7일 연속
     private static final double MOM_DAILY_AVG_THRESHOLD = 5.0; // 꼼꼼한 기억 "후보" 조건: 일평균 5회 이상
@@ -60,17 +67,21 @@ public class LifestyleRecommendationService {
     private final GeminiClient geminiClient;
 
     /**
-     * 라이프스타일 라벨(규칙 기반, 매번 새로 계산) +
-     * ADD 추천(AI 필요 -> 있으면 재사용, 없으면 새로 생성) +
+     * 라이프스타일 라벨(규칙 기반, 이번 달 기록이 7일↑ & 20회↑일 때만 활성화) +
+     * ADD 추천(AI 필요 -> 매달 20일 이후, 그 달에 딱 1번만 생성) +
      * DELETE 추천(AI 불필요, 쿼리만 하면 되니 -> 매번 라이브로 재계산해서 최신 상태 유지)
      */
     @Transactional
     public LifestyleRecommendationsResponseDto getRecommendations(Long userId) {
         List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
-        LocalDate monthStart = LocalDate.now().withDayOfMonth(1);
+        LocalDate today = LocalDate.now();
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDateTime monthStartAt = monthStart.atStartOfDay();
+        LocalDateTime monthEndAt = monthStart.plusMonths(1).atStartOfDay();
+
         List<ButtonRecord> thisMonthRecords = buttonIds.isEmpty()
                 ? List.of()
-                : buttonRecordRepository.findRecordsInRange(buttonIds, monthStart.atStartOfDay(), LocalDate.now().plusDays(1).atStartOfDay());
+                : buttonRecordRepository.findRecordsInRange(buttonIds, monthStartAt, today.plusDays(1).atStartOfDay());
         Map<Long, Button> buttonMap = buttonIds.isEmpty()
                 ? Map.of()
                 : buttonRepository.findAllById(buttonIds).stream().collect(Collectors.toMap(Button::getButtonId, b -> b));
@@ -88,16 +99,28 @@ public class LifestyleRecommendationService {
                 })
                 .toList();
 
-        LifestyleLabel label = computeLifestyleLabel(thisMonthRecords, buttonMap, top5ButtonEntries);
+        // 라이프스타일 분석(라벨)은 이번 달 기록이 7일 이상 & 20회 이상일 때만 활성화
+        boolean analysisAvailable = hasEnoughDataForAnalysis(thisMonthRecords);
+        LifestyleLabel label = analysisAvailable
+                ? computeLifestyleLabel(thisMonthRecords, buttonMap, top5ButtonEntries)
+                : null;
 
         List<LifestyleRecommendation> allActive = lifestyleRecommendationRepository.findActiveByUserId(userId);
+
+        // AI 추천(ADD)은 매달 20일이 지나야 활성화되고, 그 달에 딱 1번만 생성한다.
+        boolean aiWindowOpen = today.getDayOfMonth() >= AI_RECOMMENDATION_START_DAY_OF_MONTH;
+        boolean alreadyGeneratedThisMonth = lifestyleRecommendationRepository
+                .existsByUserIdAndRecTypeAndCreatedAtBetween(userId, "ADD", monthStartAt, monthEndAt);
 
         List<LifestyleRecommendation> activeAdd = allActive.stream()
                 .filter(r -> "ADD".equals(r.getRecType()))
                 .collect(Collectors.toCollection(ArrayList::new));
-        if (activeAdd.isEmpty()) {
+
+        if (!alreadyGeneratedThisMonth && aiWindowOpen && analysisAvailable) {
             List<LifestyleRecommendation> newAdd = generateAddRecommendations(userId, thisMonthRecords, buttonMap, top5ButtonEntries);
-            activeAdd = newAdd.isEmpty() ? List.of() : lifestyleRecommendationRepository.saveAll(newAdd);
+            if (!newAdd.isEmpty()) {
+                activeAdd = lifestyleRecommendationRepository.saveAll(newAdd);
+            }
         }
 
         List<LifestyleRecommendation> existingDelete = allActive.stream()
@@ -110,11 +133,24 @@ public class LifestyleRecommendationService {
         activeDelete.forEach(r -> recommendations.add(toDto(r)));
 
         return LifestyleRecommendationsResponseDto.builder()
-                .lifestyleLabel(label.getLabelName())
-                .lifestyleCaption(label.getCaption())
+                .analysisAvailable(analysisAvailable)
+                .lifestyleLabel(label != null ? label.getLabelName() : null)
+                .lifestyleCaption(label != null ? label.getCaption() : "아직 라이프스타일 분석에 필요한 기록이 부족해요.")
                 .analysisButtons(analysisButtons)
                 .recommendations(recommendations)
                 .build();
+    }
+
+    /** 라이프스타일 분석(라벨) 활성화 조건: 이번 달 기록한 날이 7일 이상 & 총 기록이 20회 이상 */
+    private boolean hasEnoughDataForAnalysis(List<ButtonRecord> thisMonthRecords) {
+        if (thisMonthRecords.size() < ANALYSIS_MIN_TAP_COUNT) {
+            return false;
+        }
+        long distinctDays = thisMonthRecords.stream()
+                .map(r -> r.getRecordedAt().toLocalDate())
+                .distinct()
+                .count();
+        return distinctDays >= ANALYSIS_MIN_DAYS;
     }
 
     /**
@@ -355,42 +391,61 @@ public class LifestyleRecommendationService {
     }
 
     /**
-     * top5 버튼 중 하나라도, 이번 달 탭 간격이 일정하면(변동계수 30% 이하) "규칙적".
-     * 변동계수 = 표준편차 / 평균 → 값이 작을수록 간격이 들쭉날쭉하지 않고 일정하다는 뜻.
-     * (기획자님 제안으로 시간대 집중도 대신 "간격 자체의 일정함"으로 바꿈)
+     * top5 버튼 중 하나라도, 아래 둘 중 하나만 만족하면 "규칙적"이라고 판단한다 (기획 확정: 두 기준 다 반영).
+     * (A) 특정 시간대(새벽/아침/점심/저녁/밤)에 70% 이상 몰려있다
+     * (B) 탭 간격이 일정하다 (간격들의 변동계수가 30% 이하)
      */
     private boolean isRegular(List<ButtonRecord> records, List<Map.Entry<Long, Long>> top5ButtonEntries) {
         for (Map.Entry<Long, Long> entry : top5ButtonEntries) {
-            List<LocalDateTime> times = records.stream()
+            List<ButtonRecord> buttonRecords = records.stream()
                     .filter(r -> r.getButtonId().equals(entry.getKey()))
-                    .map(ButtonRecord::getRecordedAt)
-                    .sorted()
+                    .sorted(Comparator.comparing(ButtonRecord::getRecordedAt))
                     .toList();
 
-            if (times.size() < REGULAR_MIN_TAP_COUNT) {
-                continue; // 간격을 판단하기엔 데이터가 너무 적음
+            if (buttonRecords.isEmpty()) {
+                continue;
             }
 
-            List<Double> intervalHours = new ArrayList<>();
-            for (int i = 1; i < times.size(); i++) {
-                intervalHours.add(Duration.between(times.get(i - 1), times.get(i)).toMinutes() / 60.0);
-            }
-
-            double mean = intervalHours.stream().mapToDouble(d -> d).average().orElse(0.0);
-            if (mean == 0.0) {
-                continue; // 같은 시각에 여러 번 찍힌 경우 등 예외적인 데이터는 건너뜀
-            }
-
-            double variance = intervalHours.stream()
-                    .mapToDouble(d -> Math.pow(d - mean, 2))
-                    .average().orElse(0.0);
-            double coefficientOfVariation = Math.sqrt(variance) / mean;
-
-            if (coefficientOfVariation <= REGULAR_INTERVAL_CV_THRESHOLD) {
+            if (hasHighTimeSlotConcentration(buttonRecords) || hasConsistentInterval(buttonRecords)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** (A) 특정 시간대 집중도 70% 이상 */
+    private boolean hasHighTimeSlotConcentration(List<ButtonRecord> buttonRecords) {
+        Map<String, Long> slotCounts = buttonRecords.stream()
+                .collect(Collectors.groupingBy(r -> TimeSlotResolver.resolve(r.getRecordedAt().toLocalTime()), Collectors.counting()));
+        long maxSlotCount = slotCounts.values().stream().max(Long::compareTo).orElse(0L);
+        double concentration = (double) maxSlotCount / buttonRecords.size();
+        return concentration >= REGULAR_TIME_SLOT_CONCENTRATION_THRESHOLD;
+    }
+
+    /** (B) 탭 간격의 변동계수(표준편차/평균) 30% 이하 */
+    private boolean hasConsistentInterval(List<ButtonRecord> buttonRecords) {
+        if (buttonRecords.size() < REGULAR_MIN_TAP_COUNT) {
+            return false; // 간격을 판단하기엔 데이터가 너무 적음
+        }
+
+        List<Double> intervalHours = new ArrayList<>();
+        for (int i = 1; i < buttonRecords.size(); i++) {
+            LocalDateTime prev = buttonRecords.get(i - 1).getRecordedAt();
+            LocalDateTime curr = buttonRecords.get(i).getRecordedAt();
+            intervalHours.add(Duration.between(prev, curr).toMinutes() / 60.0);
+        }
+
+        double mean = intervalHours.stream().mapToDouble(d -> d).average().orElse(0.0);
+        if (mean == 0.0) {
+            return false; // 같은 시각에 여러 번 찍힌 경우 등 예외적인 데이터는 제외
+        }
+
+        double variance = intervalHours.stream()
+                .mapToDouble(d -> Math.pow(d - mean, 2))
+                .average().orElse(0.0);
+        double coefficientOfVariation = Math.sqrt(variance) / mean;
+
+        return coefficientOfVariation <= REGULAR_INTERVAL_CV_THRESHOLD;
     }
 
     /** 최근 30일 중 20일 이상 기록했거나, 7일 이상 연속 기록했으면 "꾸준함" */
