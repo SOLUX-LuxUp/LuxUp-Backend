@@ -9,7 +9,6 @@ import com.taptap.backend.insight.client.GeminiClient;
 import com.taptap.backend.insight.dto.*;
 import com.taptap.backend.insight.entity.LifestyleRecommendation;
 import com.taptap.backend.insight.repository.LifestyleRecommendationRepository;
-import com.taptap.backend.insight.util.TimeSlotResolver;
 import com.taptap.backend.record.entity.ButtonRecord;
 import com.taptap.backend.record.repository.ButtonRecordRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -28,25 +28,32 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class LifestyleRecommendationService {
 
+    // ⚠️ 탭탭_템플릿아이콘.pdf 기준. 템플릿 프리셋에 실제로 쓰인 25개만 확인됨(전체 아이콘 라이브러리는 44개 정도라
+    //    들었는데, 이 문서엔 전체 목록이 없어서 일단 확인된 것만 반영. 전체 목록 받으면 추가 예정.
     private static final List<String> ICON_CANDIDATES = List.of(
-            "star", "heart", "book", "dumbbell", "coffee", "moon", "sun", "leaf", "pencil", "music"
+            "clean", "clothes", "plant", "dog", "pay", "shopping1", "calendar", "fire", "lightning",
+            "lock", "door", "medicine", "gym", "health", "selfcare", "food", "pencil", "camera",
+            "sleep", "sun", "liquid", "chat", "call", "note", "book"
     );
+    // ⚠️ HEX가 아니라 디자인 시스템에서 쓰는 색상 이름 그대로. (참고: "darkgrey"는 8자라
+    //    Button.icon_color/VARCHAR(7)엔 안 들어감 - 은서님과 컬럼 길이 조정 상의 필요)
     private static final List<String> COLOR_CANDIDATES = List.of(
-            "#FF6B6B", "#4D96FF", "#6BCB77", "#FFD93D", "#C780FA", "#FF9F45"
+            "red", "orange", "yellow", "green", "cyan", "blue", "indigo", "purple", "pink", "grey", "darkgrey", "black"
     );
-    private static final int RECOMMENDATION_VALID_DAYS = 30;
+    private static final int RECOMMENDATION_VALID_DAYS = 7; // ADD 추천 리셋 주기. 상수 하나만 바꾸면 됨 (현재 일주일 단위)
     private static final int ADD_RECOMMENDATION_COUNT = 5;
     private static final int DELETE_RECOMMENDATION_COUNT = 3;
 
     // ⚠️ 아래 기준들은 기획서에 정확한 숫자가 없어서 저희(백엔드)가 임의로 정한 값입니다.
     //    실 데이터로 테스트해보면서 조정이 필요할 수 있고, 최종적으로는 기획자님께 확인받아야 해요.
-    private static final double REGULAR_TIME_SLOT_CONCENTRATION_THRESHOLD = 0.7; // 규칙적인 기억
+    private static final int REGULAR_MIN_TAP_COUNT = 3; // 규칙적인 기억: 간격 판단하려면 최소 3번(간격 2개)은 있어야 함
+    private static final double REGULAR_INTERVAL_CV_THRESHOLD = 0.3; // 규칙적인 기억: 탭 간격의 변동계수 30% 이하면 "규칙적"
     private static final int CONSISTENT_DAYS_THRESHOLD = 20;   // 꾸준한 기억: 최근 30일 중 20일 이상
     private static final int CONSISTENT_STREAK_THRESHOLD = 7;  // 꾸준한 기억: 7일 연속
     private static final double MOM_DAILY_AVG_THRESHOLD = 5.0; // 꼼꼼한 기억 "후보" 조건: 일평균 5회 이상
     private static final double MOM_TOP5_SHARE_THRESHOLD = 0.7; // 꼼꼼한 기억 "후보" 조건: top5가 전체의 70% 미만(=고르게 사용)
     private static final double MOM_OVERRIDE_DAILY_AVG_THRESHOLD = 20.0; // 카테고리가 있어도 이 이상이면 균형보다 꼼꼼 우선(기획서 예시)
-    private static final double BALANCED_MAX_CATEGORY_RATIO_THRESHOLD = 0.5; // 균형적인 기억: 1위 카테고리 비중 50% 미만
+    private static final double BALANCED_MAX_CATEGORY_RATIO_THRESHOLD = 0.4; // 균형적인 기억: 1위 카테고리 비중 40% 미만
     private static final double FOCUSED_TOP_BUTTON_RATIO_THRESHOLD = 0.4; // 집중하는 기억: top1 버튼 비중 40% 이상
     private static final double FOCUSED_TOP_CATEGORY_RATIO_THRESHOLD = 0.6; // 집중하는 기억: top1 카테고리 비중 60% 이상
 
@@ -351,20 +358,39 @@ public class LifestyleRecommendationService {
         return meticulousCandidate ? LifestyleLabel.METICULOUS : null;
     }
 
-    /** top5 버튼 중 하나라도, 그 버튼 기록의 특정 시간대 집중도가 70% 이상이면 "규칙적" */
+    /**
+     * top5 버튼 중 하나라도, 이번 달 탭 간격이 일정하면(변동계수 30% 이하) "규칙적".
+     * 변동계수 = 표준편차 / 평균 → 값이 작을수록 간격이 들쭉날쭉하지 않고 일정하다는 뜻.
+     * (기획자님 제안으로 시간대 집중도 대신 "간격 자체의 일정함"으로 바꿈)
+     */
     private boolean isRegular(List<ButtonRecord> records, List<Map.Entry<Long, Long>> top5ButtonEntries) {
         for (Map.Entry<Long, Long> entry : top5ButtonEntries) {
-            List<ButtonRecord> buttonRecords = records.stream()
+            List<LocalDateTime> times = records.stream()
                     .filter(r -> r.getButtonId().equals(entry.getKey()))
+                    .map(ButtonRecord::getRecordedAt)
+                    .sorted()
                     .toList();
-            if (buttonRecords.isEmpty()) {
-                continue;
+
+            if (times.size() < REGULAR_MIN_TAP_COUNT) {
+                continue; // 간격을 판단하기엔 데이터가 너무 적음
             }
-            Map<String, Long> slotCounts = buttonRecords.stream()
-                    .collect(Collectors.groupingBy(r -> TimeSlotResolver.resolve(r.getRecordedAt().toLocalTime()), Collectors.counting()));
-            long maxSlotCount = slotCounts.values().stream().max(Long::compareTo).orElse(0L);
-            double concentration = (double) maxSlotCount / buttonRecords.size();
-            if (concentration >= REGULAR_TIME_SLOT_CONCENTRATION_THRESHOLD) {
+
+            List<Double> intervalHours = new ArrayList<>();
+            for (int i = 1; i < times.size(); i++) {
+                intervalHours.add(Duration.between(times.get(i - 1), times.get(i)).toMinutes() / 60.0);
+            }
+
+            double mean = intervalHours.stream().mapToDouble(d -> d).average().orElse(0.0);
+            if (mean == 0.0) {
+                continue; // 같은 시각에 여러 번 찍힌 경우 등 예외적인 데이터는 건너뜀
+            }
+
+            double variance = intervalHours.stream()
+                    .mapToDouble(d -> Math.pow(d - mean, 2))
+                    .average().orElse(0.0);
+            double coefficientOfVariation = Math.sqrt(variance) / mean;
+
+            if (coefficientOfVariation <= REGULAR_INTERVAL_CV_THRESHOLD) {
                 return true;
             }
         }

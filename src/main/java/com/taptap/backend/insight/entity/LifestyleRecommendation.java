@@ -39,7 +39,7 @@ public class LifestyleRecommendation {
     @Column(name = "suggested_icon_name", length = 100)
     private String suggestedIconName;
 
-    @Column(name = "suggested_icon_color", length = 7)
+    @Column(name = "suggested_icon_color", length = 20) // HEX 아니라 색상 이름(darkgrey 등)이 들어가서 넉넉하게 확장
     private String suggestedIconColor;
 
     @Column(name = "target_button_id")
