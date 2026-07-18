@@ -145,6 +145,13 @@ public class AuthService {
             throw new AuthException(HttpStatus.UNAUTHORIZED, "만료된 Refresh Token입니다.");
         }
 
+        User user = userRepository.findById(tokenEntity.getUserId())
+                .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "존재하지 않는 계정입니다."));
+
+        if ("DELETED".equals(user.getStatus())) {
+            throw new AuthException(HttpStatus.UNAUTHORIZED, "존재하지 않는 계정입니다.");
+        }
+
         String newAccessToken = jwtProvider.generateAccessToken(tokenEntity.getUserId());
         return new TokenRefreshResponse(newAccessToken);
     }
@@ -221,8 +228,13 @@ public class AuthService {
                 .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "존재하지 않는 계정입니다."));
         user.setStatus("DELETED");
         user.setDeletedAt(LocalDateTime.now());
+
+        long maskSuffix = System.currentTimeMillis();
         if (user.getEmail() != null) {
-            user.setEmail(user.getEmail() + "_deleted_" + System.currentTimeMillis());
+            user.setEmail(user.getEmail() + "_deleted_" + maskSuffix);
+        }
+        if (user.getGoogleSub() != null) {
+            user.setGoogleSub(user.getGoogleSub() + "_deleted_" + maskSuffix);
         }
         userRepository.save(user);
 
