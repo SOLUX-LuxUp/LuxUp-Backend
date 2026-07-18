@@ -7,12 +7,14 @@ import com.taptap.backend.reminder.dto.ReminderListResponseDto;
 import com.taptap.backend.reminder.dto.ReminderToggleRequestDto;
 import com.taptap.backend.reminder.dto.ReminderToggleResponseDto;
 import com.taptap.backend.reminder.service.ReminderService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/reminders")
 public class ReminderController {
