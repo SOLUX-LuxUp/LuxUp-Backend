@@ -28,15 +28,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class LifestyleRecommendationService {
 
-    // ⚠️ 탭탭_템플릿아이콘.pdf 기준. 템플릿 프리셋에 실제로 쓰인 25개만 확인됨(전체 아이콘 라이브러리는 44개 정도라
-    //    들었는데, 이 문서엔 전체 목록이 없어서 일단 확인된 것만 반영. 전체 목록 받으면 추가 예정.
+    // 전체 아이콘 목록과 상이하다면 추가/수정 예정.
     private static final List<String> ICON_CANDIDATES = List.of(
             "clean", "clothes", "plant", "dog", "pay", "shopping1", "calendar", "fire", "lightning",
             "lock", "door", "medicine", "gym", "health", "selfcare", "food", "pencil", "camera",
             "sleep", "sun", "liquid", "chat", "call", "note", "book"
     );
-    // ⚠️ HEX가 아니라 디자인 시스템에서 쓰는 색상 이름 그대로. (참고: "darkgrey"는 8자라
-    //    Button.icon_color/VARCHAR(7)엔 안 들어감 - 은서님과 컬럼 길이 조정 상의 필요)
+    // ⚠️ HEX가 아니라 디자인 시스템에서 쓰는 색상 이름 그대로.
     private static final List<String> COLOR_CANDIDATES = List.of(
             "red", "orange", "yellow", "green", "cyan", "blue", "indigo", "purple", "pink", "grey", "darkgrey", "black"
     );
@@ -44,8 +42,6 @@ public class LifestyleRecommendationService {
     private static final int ADD_RECOMMENDATION_COUNT = 5;
     private static final int DELETE_RECOMMENDATION_COUNT = 3;
 
-    // ⚠️ 아래 기준들은 기획서에 정확한 숫자가 없어서 저희(백엔드)가 임의로 정한 값입니다.
-    //    실 데이터로 테스트해보면서 조정이 필요할 수 있고, 최종적으로는 기획자님께 확인받아야 해요.
     private static final int REGULAR_MIN_TAP_COUNT = 3; // 규칙적인 기억: 간격 판단하려면 최소 3번(간격 2개)은 있어야 함
     private static final double REGULAR_INTERVAL_CV_THRESHOLD = 0.3; // 규칙적인 기억: 탭 간격의 변동계수 30% 이하면 "규칙적"
     private static final int CONSISTENT_DAYS_THRESHOLD = 20;   // 꾸준한 기억: 최근 30일 중 20일 이상
