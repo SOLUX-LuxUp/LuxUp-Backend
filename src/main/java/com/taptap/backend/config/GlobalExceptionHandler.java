@@ -7,6 +7,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.taptap.backend.button.exception.ButtonException;
+import com.taptap.backend.reminder.exception.ReminderException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -25,6 +26,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ButtonException.class)
     public ResponseEntity<ApiResponse<Object>> handleButtonException(ButtonException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ApiResponse<>(false, e.getMessage(), null));
+    }
+
+    @ExceptionHandler(ReminderException.class)
+    public ResponseEntity<ApiResponse<Object>> handleReminderException(ReminderException e) {
         return ResponseEntity.status(e.getStatus())
                 .body(new ApiResponse<>(false, e.getMessage(), null));
     }

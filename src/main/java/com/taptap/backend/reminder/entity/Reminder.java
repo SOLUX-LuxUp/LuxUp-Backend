@@ -1,13 +1,17 @@
 package com.taptap.backend.reminder.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @Entity
 @Table(name = "reminder")
 public class Reminder {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "reminder_id")
@@ -19,24 +23,49 @@ public class Reminder {
     @Column(name = "is_enabled", nullable = false)
     private Boolean isEnabled = false;
 
-    @Lob
-    @Column(name = "days_of_week")
-    private String daysOfWeek;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "frequency_type", nullable = false, length = 10)
+    private FrequencyType frequencyType = FrequencyType.DAILY;
 
-    @Column(name = "remind_time")
-    private LocalTime remindTime;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "days_of_week")
+    private List<Integer> daysOfWeek;
+
+    @Column(name = "interval_weeks")
+    private Integer intervalWeeks;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "day_of_month")
+    private List<Integer> dayOfMonth;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reminder_mode", nullable = false, length = 10)
+    private ReminderMode reminderMode = ReminderMode.INTERVAL;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "remind_times")
+    private List<LocalTime> remindTimes;
 
     @Column(name = "interval_hours")
     private Integer intervalHours = 24;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @Column(name = "active_start_time")
+    private LocalTime activeStartTime;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "active_end_time")
+    private LocalTime activeEndTime;
+
+    @Column(name = "once_activated_at")
+    private LocalDateTime onceActivatedAt;
 
     @Column(name = "last_reminded_at")
     private LocalDateTime lastRemindedAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
@@ -52,12 +81,40 @@ public class Reminder {
         updatedAt = LocalDateTime.now();
     }
 
-    public Long getReminderId() {
-        return reminderId;
+    public void updateDetail(FrequencyType frequencyType,
+                             List<Integer> daysOfWeek,
+                             Integer intervalWeeks,
+                             List<Integer> dayOfMonth,
+                             ReminderMode reminderMode,
+                             List<LocalTime> remindTimes,
+                             Integer intervalHours,
+                             LocalTime activeStartTime,
+                             LocalTime activeEndTime) {
+        this.frequencyType = frequencyType;
+        this.daysOfWeek = daysOfWeek;
+        this.intervalWeeks = intervalWeeks;
+        this.dayOfMonth = dayOfMonth;
+        this.reminderMode = reminderMode;
+        this.remindTimes = remindTimes;
+        this.intervalHours = intervalHours;
+        this.activeStartTime = activeStartTime;
+        this.activeEndTime = activeEndTime;
+        this.onceActivatedAt = (frequencyType == FrequencyType.ONCE) ? LocalDateTime.now() : null;
     }
 
-    public void setReminderId(Long reminderId) {
-        this.reminderId = reminderId;
+    public void enable() {
+        this.isEnabled = true;
+        if (this.frequencyType == FrequencyType.ONCE) {
+            this.onceActivatedAt = LocalDateTime.now();
+        }
+    }
+
+    public void disable() {
+        this.isEnabled = false;
+    }
+
+    public Long getReminderId() {
+        return reminderId;
     }
 
     public Long getButtonId() {
@@ -72,24 +129,36 @@ public class Reminder {
         return isEnabled;
     }
 
-    public void setIsEnabled(Boolean isEnabled) {
-        this.isEnabled = isEnabled;
+    public FrequencyType getFrequencyType() {
+        return frequencyType;
     }
 
-    public String getDaysOfWeek() {
+    public void setFrequencyType(FrequencyType frequencyType) {
+        this.frequencyType = frequencyType;
+    }
+
+    public List<Integer> getDaysOfWeek() {
         return daysOfWeek;
     }
 
-    public void setDaysOfWeek(String daysOfWeek) {
-        this.daysOfWeek = daysOfWeek;
+    public Integer getIntervalWeeks() {
+        return intervalWeeks;
     }
 
-    public LocalTime getRemindTime() {
-        return remindTime;
+    public List<Integer> getDayOfMonth() {
+        return dayOfMonth;
     }
 
-    public void setRemindTime(LocalTime remindTime) {
-        this.remindTime = remindTime;
+    public ReminderMode getReminderMode() {
+        return reminderMode;
+    }
+
+    public void setReminderMode(ReminderMode reminderMode) {
+        this.reminderMode = reminderMode;
+    }
+
+    public List<LocalTime> getRemindTimes() {
+        return remindTimes;
     }
 
     public Integer getIntervalHours() {
@@ -100,6 +169,22 @@ public class Reminder {
         this.intervalHours = intervalHours;
     }
 
+    public LocalTime getActiveStartTime() {
+        return activeStartTime;
+    }
+
+    public LocalTime getActiveEndTime() {
+        return activeEndTime;
+    }
+
+    public LocalDateTime getOnceActivatedAt() {
+        return onceActivatedAt;
+    }
+
+    public LocalDateTime getLastRemindedAt() {
+        return lastRemindedAt;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -108,19 +193,7 @@ public class Reminder {
         return updatedAt;
     }
 
-    public LocalDateTime getLastRemindedAt() {
-        return lastRemindedAt;
-    }
-
-    public void setLastRemindedAt(LocalDateTime lastRemindedAt) {
-        this.lastRemindedAt = lastRemindedAt;
-    }
-
     public LocalDateTime getDeletedAt() {
         return deletedAt;
-    }
-
-    public void setDeletedAt(LocalDateTime deletedAt) {
-        this.deletedAt = deletedAt;
     }
 }
