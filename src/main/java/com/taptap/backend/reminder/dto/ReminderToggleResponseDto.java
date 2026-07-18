@@ -15,7 +15,7 @@ public record ReminderToggleResponseDto(
                 reminder.getReminderId(),
                 reminder.getButtonId(),
                 reminder.getIsEnabled(),
-                reminder.getUpdatedAt()
+                LocalDateTime.now()
         );
     }
 }

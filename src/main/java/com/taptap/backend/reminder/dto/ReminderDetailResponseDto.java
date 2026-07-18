@@ -37,7 +37,7 @@ public record ReminderDetailResponseDto(
                 reminder.getIntervalHours(),
                 reminder.getActiveStartTime(),
                 reminder.getActiveEndTime(),
-                reminder.getUpdatedAt()
+                LocalDateTime.now()
         );
     }
 }
