@@ -29,9 +29,6 @@ public class ButtonService {
             "#FF5733", "#00BFFF", "#A8D8A8", "#FFC107"
     );
 
-    private static final List<String> ALLOWED_PERIOD_UNITS = List.of("DAY", "WEEK", "MONTH", "YEAR");
-    private static final List<String> ALLOWED_COMPARISON_TYPES = List.of("GTE", "LTE");
-
     private final ButtonRepository buttonRepository;
     private final ButtonCategoryRepository buttonCategoryRepository;
     private final ButtonRecordRepository buttonRecordRepository;
@@ -54,7 +51,6 @@ public class ButtonService {
     @Transactional
     public ButtonResponseDto createButton(Long userId, CreateButtonRequestDto request) {
         validateExpiry(request.expiryEnabled(), request.expiredAt());
-        validateGoal(request.goalEnabled(), request.goalPeriodUnit(), request.goalCount(), request.goalComparisonType());
         validateCategoryOwnership(userId, request.categoryId());
 
         Button button = new Button();
@@ -64,13 +60,6 @@ public class ButtonService {
         button.setButtonName(resolveButtonName(userId, request.buttonName()));
         button.setIconName(resolveIconName(request.iconName()));
         button.setIconColor(resolveIconColor(request.iconColor()));
-
-        boolean goalEnabled = Boolean.TRUE.equals(request.goalEnabled());
-        button.setGoalEnabled(goalEnabled);
-        button.setGoalName(goalEnabled ? request.goalName() : null);
-        button.setGoalPeriodUnit(goalEnabled ? request.goalPeriodUnit() : null);
-        button.setGoalCount(goalEnabled ? request.goalCount() : null);
-        button.setGoalComparisonType(goalEnabled ? request.goalComparisonType() : null);
 
         boolean expiryEnabled = Boolean.TRUE.equals(request.expiryEnabled());
         button.setExpiryEnabled(expiryEnabled);
@@ -130,7 +119,6 @@ public class ButtonService {
                             b.getButtonId(), b.getButtonName(), b.getIconName(), b.getIconColor(),
                             b.getCategoryId(), category != null ? category.getCategoryName() : null,
                             b.getIsFavorite(), b.getFavoriteOrder(),
-                            b.getGoalEnabled(), b.getGoalName(), b.getGoalPeriodUnit(), b.getGoalCount(), b.getGoalComparisonType(),
                             b.getExpiryEnabled(), b.getExpiredAt(), b.getIsActive(),
                             lastRecordedMap.get(b.getButtonId()), b.getCreatedAt()
                     );
@@ -170,7 +158,6 @@ public class ButtonService {
                 .map(b -> new CategoryButtonItemDto(
                         b.getButtonId(), b.getButtonName(), b.getIconName(), b.getIconColor(),
                         b.getIsFavorite(), b.getFavoriteOrder(),
-                        b.getGoalEnabled(), b.getGoalName(), b.getGoalPeriodUnit(), b.getGoalCount(), b.getGoalComparisonType(),
                         b.getExpiryEnabled(), b.getExpiredAt(), b.getIsActive(),
                         lastRecordedMap.get(b.getButtonId()), b.getCreatedAt()
                 ))
@@ -211,14 +198,12 @@ public class ButtonService {
             button.setIconColor(request.iconColor());
         }
 
-        applyGoalUpdate(button, request);
         applyExpiryUpdate(button, request);
 
         Button saved = buttonRepository.save(button);
         return new UpdateButtonResponseDto(
                 saved.getButtonId(), saved.getButtonName(), saved.getIconName(), saved.getIconColor(),
-                saved.getCategoryId(), saved.getGoalEnabled(), saved.getGoalName(), saved.getGoalPeriodUnit(),
-                saved.getGoalCount(), saved.getGoalComparisonType(), saved.getExpiryEnabled(),
+                saved.getCategoryId(), saved.getExpiryEnabled(),
                 saved.getExpiredAt(), saved.getUpdatedAt()
         );
     }
@@ -290,29 +275,6 @@ public class ButtonService {
         return result;
     }
 
-    private void applyGoalUpdate(Button button, UpdateButtonRequestDto request) {
-        Boolean goalEnabled = request.goalEnabled() != null ? request.goalEnabled() : button.getGoalEnabled();
-        String goalName = request.goalName() != null ? request.goalName() : button.getGoalName();
-        String goalPeriodUnit = request.goalPeriodUnit() != null ? request.goalPeriodUnit() : button.getGoalPeriodUnit();
-        Integer goalCount = request.goalCount() != null ? request.goalCount() : button.getGoalCount();
-        String goalComparisonType = request.goalComparisonType() != null ? request.goalComparisonType() : button.getGoalComparisonType();
-
-        validateGoal(goalEnabled, goalPeriodUnit, goalCount, goalComparisonType);
-
-        button.setGoalEnabled(goalEnabled);
-        if (Boolean.TRUE.equals(goalEnabled)) {
-            button.setGoalName(goalName);
-            button.setGoalPeriodUnit(goalPeriodUnit);
-            button.setGoalCount(goalCount);
-            button.setGoalComparisonType(goalComparisonType);
-        } else {
-            button.setGoalName(null);
-            button.setGoalPeriodUnit(null);
-            button.setGoalCount(null);
-            button.setGoalComparisonType(null);
-        }
-    }
-
     private void applyExpiryUpdate(Button button, UpdateButtonRequestDto request) {
         Boolean expiryEnabled = request.expiryEnabled() != null ? request.expiryEnabled() : button.getExpiryEnabled();
         LocalDate expiredAt = request.expiredAt() != null ? request.expiredAt() : button.getExpiredAt();
@@ -340,21 +302,6 @@ public class ButtonService {
             if (expiredAt == null || !expiredAt.isAfter(LocalDate.now())) {
                 throw new ButtonException(HttpStatus.BAD_REQUEST, "만료일은 오늘 이후 날짜여야 합니다.");
             }
-        }
-    }
-
-    private void validateGoal(Boolean goalEnabled, String periodUnit, Integer count, String comparisonType) {
-        if (!Boolean.TRUE.equals(goalEnabled)) {
-            return;
-        }
-        if (periodUnit != null && !ALLOWED_PERIOD_UNITS.contains(periodUnit)) {
-            throw new ButtonException(HttpStatus.BAD_REQUEST, "goalPeriodUnit 값이 올바르지 않습니다.");
-        }
-        if (count != null && (count < 1 || count > 50)) {
-            throw new ButtonException(HttpStatus.BAD_REQUEST, "goalCount는 1~50 사이여야 합니다.");
-        }
-        if (comparisonType != null && !ALLOWED_COMPARISON_TYPES.contains(comparisonType)) {
-            throw new ButtonException(HttpStatus.BAD_REQUEST, "goalComparisonType 값이 올바르지 않습니다.");
         }
     }
 
@@ -403,7 +350,6 @@ public class ButtonService {
                             b.getButtonId(), b.getButtonName(), b.getIconName(), b.getIconColor(),
                             b.getCategoryId(), category != null ? category.getCategoryName() : null,
                             b.getIsFavorite(), b.getFavoriteOrder(),
-                            b.getGoalEnabled(), b.getGoalName(), b.getGoalPeriodUnit(), b.getGoalCount(), b.getGoalComparisonType(),
                             b.getExpiryEnabled(), b.getExpiredAt(), b.getIsActive(),
                             lastRecordedMap.get(b.getButtonId()), b.getCreatedAt()
                     );
@@ -418,11 +364,6 @@ public class ButtonService {
                 button.getIconName(),
                 button.getIconColor(),
                 button.getCategoryId(),
-                button.getGoalEnabled(),
-                button.getGoalName(),
-                button.getGoalPeriodUnit(),
-                button.getGoalCount(),
-                button.getGoalComparisonType(),
                 button.getExpiryEnabled(),
                 button.getExpiredAt(),
                 button.getIsFavorite(),

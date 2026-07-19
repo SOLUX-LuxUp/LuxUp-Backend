@@ -9,11 +9,6 @@ public record UpdateButtonResponseDto(
         String iconName,
         String iconColor,
         Long categoryId,
-        Boolean goalEnabled,
-        String goalName,
-        String goalPeriodUnit,
-        Integer goalCount,
-        String goalComparisonType,
         Boolean expiryEnabled,
         LocalDate expiredAt,
         LocalDateTime updatedAt
