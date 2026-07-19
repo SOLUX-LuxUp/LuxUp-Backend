@@ -21,14 +21,12 @@ import java.util.stream.Collectors;
 @Service
 public class ButtonService {
 
-    // TODO: 누리님께 받은 실제 아이콘/색상 풀로 교체 필요 (현재는 임시 placeholder)
     private static final List<String> DEFAULT_ICON_NAMES = List.of(
-            "icon-water", "icon-stretch", "icon-book", "icon-meditation"
+            "person", "chat", "plant", "health", "note"
     );
     private static final List<String> DEFAULT_ICON_COLORS = List.of(
-            "#FF5733", "#00BFFF", "#A8D8A8", "#FFC107"
+            "#FF5733", "#00BFFF", "#A8D8A8", "#FFC107", "#1A1A1A"
     );
-
     private final ButtonRepository buttonRepository;
     private final ButtonCategoryRepository buttonCategoryRepository;
     private final ButtonRecordRepository buttonRecordRepository;
