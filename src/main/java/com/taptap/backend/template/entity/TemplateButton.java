@@ -21,7 +21,7 @@ public class TemplateButton {
     @Column(name = "icon_name", nullable = false, length = 100)
     private String iconName;
 
-    @Column(name = "icon_color", nullable = false, length = 7)
+    @Column(name = "icon_color", nullable = false, length = 20)
     private String iconColor;
 
     @Column(name = "category_name", length = 50)

@@ -25,7 +25,7 @@ public class ButtonService {
             "person", "chat", "plant", "health", "note"
     );
     private static final List<String> DEFAULT_ICON_COLORS = List.of(
-            "#FF5733", "#00BFFF", "#A8D8A8", "#FFC107", "#1A1A1A"
+            "red", "cyan", "green", "orange", "black"
     );
     private final ButtonRepository buttonRepository;
     private final ButtonCategoryRepository buttonCategoryRepository;
