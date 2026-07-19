@@ -8,11 +8,6 @@ public record UpdateButtonRequestDto(
         String iconColor,
         Long categoryId,
         Boolean clearCategory,
-        Boolean goalEnabled,
-        String goalName,
-        String goalPeriodUnit,
-        Integer goalCount,
-        String goalComparisonType,
         Boolean expiryEnabled,
         LocalDate expiredAt
 ) {
