@@ -29,11 +29,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class LifestyleRecommendationService {
 
-    // 전체 아이콘 목록과 상이하다면 추가/수정 예정.
+    // 아이콘 목록 (총 44개)
     private static final List<String> ICON_CANDIDATES = List.of(
-            "clean", "clothes", "plant", "dog", "pay", "shopping1", "calendar", "fire", "lightning",
-            "lock", "door", "medicine", "gym", "health", "selfcare", "food", "pencil", "camera",
-            "sleep", "sun", "liquid", "chat", "call", "note", "book"
+            "book", "calendar", "call", "camera", "car", "celebrate", "chat", "clean", "clothes", "cup",
+            "dessert", "dog", "door", "drink", "fire", "flower", "food", "fruit", "gym", "health",
+            "labtop", "lightbulb", "lightning", "liquid", "lock", "mask", "medicine", "music1", "music2", "note",
+            "pay", "pencil", "person", "plant", "selfcare", "shoe", "shopping1", "shopping2", "shower", "sleep",
+            "sport1", "sport2", "sun", "travel"
     );
     // ⚠️ HEX가 아니라 디자인 시스템에서 쓰는 색상 이름 그대로.
     private static final List<String> COLOR_CANDIDATES = List.of(
