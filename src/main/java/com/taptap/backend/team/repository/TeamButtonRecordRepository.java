@@ -17,4 +17,7 @@ public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonReco
                                          org.springframework.data.domain.Pageable pageable);
 
     long countByTeamButtonIdAndUserIdAndDeletedAtIsNull(Long teamButtonId, Long userId);
+
+    // 팀원 목록 조회 - 팀원별 최근 팀 버튼 기록 1건
+    Optional<TeamButtonRecord> findFirstByTeamIdAndUserIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamId, Long userId);
 }

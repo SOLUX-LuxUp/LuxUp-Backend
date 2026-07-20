@@ -2,12 +2,11 @@ package com.taptap.backend.team.dto;
 
 import java.time.LocalDateTime;
 
-public record TeamMemberListItemDto(
+public record UpdateTeamProfileResponseDto(
+        Long teamId,
         Long userId,
         String displayName,
         String profileImageUrl,
-        String role,
-        LocalDateTime joinedAt,
-        MemberLatestRecordDto latestRecord
+        LocalDateTime updatedAt
 ) {
 }

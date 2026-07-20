@@ -53,4 +53,13 @@ public interface ButtonRecordRepository extends JpaRepository<ButtonRecord, Long
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    // 팀원 버튼 기록 상세 조회 - 공유 설정된 여러 버튼의 기록을 커서(recordId) 기반으로 병합 조회
+    @Query("SELECT br FROM ButtonRecord br WHERE br.buttonId IN :buttonIds AND br.deletedAt IS NULL " +
+            "AND (:cursor IS NULL OR br.recordId < :cursor) ORDER BY br.recordId DESC")
+    List<ButtonRecord> findTimelineByButtonIds(
+            @Param("buttonIds") List<Long> buttonIds,
+            @Param("cursor") Long cursor,
+            Pageable pageable
+    );
 }

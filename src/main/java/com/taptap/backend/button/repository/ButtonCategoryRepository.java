@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ButtonCategoryRepository extends JpaRepository<ButtonCategory, Long> {
+    List<ButtonCategory> findAllByUserId(Long userId);
     boolean existsByCategoryIdAndUserId(Long categoryId, Long userId);
     boolean existsByUserIdAndCategoryNameAndDeletedAtIsNull(Long userId, String categoryName);
     boolean existsByUserIdAndCategoryNameAndDeletedAtIsNullAndCategoryIdNot(Long userId, String categoryName, Long categoryId);
