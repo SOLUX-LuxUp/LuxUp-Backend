@@ -9,6 +9,7 @@ import java.util.List;
 
 public interface TeamButtonCategoryRepository extends JpaRepository<TeamButtonCategory, Long> {
     List<TeamButtonCategory> findAllByTeamIdAndDeletedAtIsNullOrderByDisplayOrderAsc(Long teamId);
+    List<TeamButtonCategory> findAllByTeamId(Long teamId);
     boolean existsByTeamIdAndCategoryNameAndDeletedAtIsNull(Long teamId, String categoryName);
 
     @Query("SELECT MAX(c.displayOrder) FROM TeamButtonCategory c WHERE c.teamId = :teamId AND c.deletedAt IS NULL")
