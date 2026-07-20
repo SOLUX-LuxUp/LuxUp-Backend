@@ -39,6 +39,14 @@ public class TeamButtonUserSetting {
     @Column(name = "permission_status", nullable = false, length = 20)
     private String permissionStatus = "granted"; // granted / pending / denied
 
+    // 탭 권한 요청 시각 (팀 공유 버튼 탭 권한 API). 재요청 시 갱신됨.
+    @Column(name = "requested_at")
+    private LocalDateTime requestedAt;
+
+    // 승인/거부 처리한 유저(팀장 또는 버튼 생성자)
+    @Column(name = "decided_by")
+    private Long decidedBy;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
