@@ -25,4 +25,7 @@ public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonReco
     // 팀 인사이트 - 특정 기간(start 이상 ~ end 미만) 팀 전체 기록
     List<TeamButtonRecord> findAllByTeamIdAndDeletedAtIsNullAndRecordedAtGreaterThanEqualAndRecordedAtLessThan(
             Long teamId, LocalDateTime start, LocalDateTime end);
+
+    // 팀 목록 조회 - 팀 최근 기록(latestRecord) + 최근 활동 멤버(recentUpdatedMembers) 계산용
+    List<TeamButtonRecord> findTop20ByTeamIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamId);
 }

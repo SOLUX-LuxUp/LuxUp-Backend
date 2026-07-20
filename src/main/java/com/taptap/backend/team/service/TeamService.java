@@ -20,6 +20,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -325,6 +326,33 @@ public class TeamService {
                 .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl()))
                 .collect(Collectors.toList());
 
+        Map<Long, TeamMember> memberByUserId = members.stream()
+                .collect(Collectors.toMap(TeamMember::getUserId, m -> m, (a, b) -> a));
+        List<TeamButtonRecord> recentRecords = teamButtonRecordRepository.findTop20ByTeamIdAndDeletedAtIsNullOrderByRecordedAtDesc(team.getTeamId());
+
+        TeamLatestRecordDto latestRecord = recentRecords.stream()
+                .findFirst()
+                .map(r -> {
+                    TeamButton b = teamButtonRepository.findById(r.getTeamButtonId()).orElse(null);
+                    return new TeamLatestRecordDto(
+                            r.getTeamButtonId(), b == null ? null : b.getButtonName(),
+                            b == null ? null : b.getIconName(), b == null ? null : b.getIconColor(),
+                            r.getRecordedAt()
+                    );
+                })
+                .orElse(null);
+
+        List<MemberProfileDto> recentUpdatedMembers = recentRecords.stream()
+                .map(TeamButtonRecord::getUserId)
+                .distinct()
+                .limit(3)
+                .map(uid -> {
+                    TeamMember m = memberByUserId.get(uid);
+                    return m == null ? new MemberProfileDto(uid, null, null)
+                            : new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl());
+                })
+                .collect(Collectors.toList());
+
         return new TeamListItemDto(
                 team.getTeamId(),
                 team.getTeamName(),
@@ -335,6 +363,8 @@ public class TeamService {
                 team.getMaxMember(),
                 (long) members.size(),
                 profiles,
+                latestRecord,
+                recentUpdatedMembers,
                 team.getUpdatedAt()
         );
     }
