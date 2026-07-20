@@ -3,7 +3,11 @@ package com.taptap.backend.team.service;
 import com.taptap.backend.team.dto.*;
 import com.taptap.backend.team.entity.Team;
 import com.taptap.backend.team.entity.TeamMember;
+import com.taptap.backend.team.entity.TeamButton;
+import com.taptap.backend.team.entity.TeamButtonRecord;
 import com.taptap.backend.team.exception.TeamException;
+import com.taptap.backend.team.repository.TeamButtonRecordRepository;
+import com.taptap.backend.team.repository.TeamButtonRepository;
 import com.taptap.backend.team.repository.TeamMemberRepository;
 import com.taptap.backend.team.repository.TeamRepository;
 import com.taptap.backend.user.entity.User;
@@ -28,11 +32,16 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
+    private final TeamButtonRecordRepository teamButtonRecordRepository;
+    private final TeamButtonRepository teamButtonRepository;
 
-    public TeamService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, UserRepository userRepository) {
+    public TeamService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, UserRepository userRepository,
+                        TeamButtonRecordRepository teamButtonRecordRepository, TeamButtonRepository teamButtonRepository) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userRepository = userRepository;
+        this.teamButtonRecordRepository = teamButtonRecordRepository;
+        this.teamButtonRepository = teamButtonRepository;
     }
 
     @Transactional
@@ -258,8 +267,23 @@ public class TeamService {
         }
         List<TeamMember> members = teamMemberRepository.findAllByTeamIdAndDeletedAtIsNullOrderByJoinedAtAsc(teamId);
         return members.stream()
-                .map(m -> new TeamMemberListItemDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl(), m.getRole(), m.getJoinedAt()))
+                .map(m -> new TeamMemberListItemDto(
+                        m.getUserId(), m.getDisplayName(), m.getProfileImageUrl(), m.getRole(), m.getJoinedAt(),
+                        latestRecordOf(teamId, m.getUserId())
+                ))
                 .collect(Collectors.toList());
+    }
+
+    private MemberLatestRecordDto latestRecordOf(Long teamId, Long userId) {
+        return teamButtonRecordRepository.findFirstByTeamIdAndUserIdAndDeletedAtIsNullOrderByRecordedAtDesc(teamId, userId)
+                .map(r -> new MemberLatestRecordDto(buttonNameOf(r), r.getRecordedAt()))
+                .orElse(null);
+    }
+
+    private String buttonNameOf(TeamButtonRecord record) {
+        return teamButtonRepository.findById(record.getTeamButtonId())
+                .map(TeamButton::getButtonName)
+                .orElse(null);
     }
 
     private void transferOwnership(Long teamId, Long currentOwnerId, Long newOwnerUserId) {
