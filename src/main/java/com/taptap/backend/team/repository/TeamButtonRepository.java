@@ -9,4 +9,7 @@ import java.util.Optional;
 public interface TeamButtonRepository extends JpaRepository<TeamButton, Long> {
     Optional<TeamButton> findByTeamButtonIdAndTeamIdAndDeletedAtIsNull(Long teamButtonId, Long teamId);
     List<TeamButton> findAllByTeamIdAndIsActiveTrueAndDeletedAtIsNull(Long teamId);
+
+    // 팀 인사이트 - 삭제된 버튼도 과거 기록의 이름 표시를 위해 포함
+    List<TeamButton> findAllByTeamId(Long teamId);
 }

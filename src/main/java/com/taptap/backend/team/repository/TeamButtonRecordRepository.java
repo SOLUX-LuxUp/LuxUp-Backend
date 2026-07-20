@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,4 +21,8 @@ public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonReco
 
     // 팀원 목록 조회 - 팀원별 최근 팀 버튼 기록 1건
     Optional<TeamButtonRecord> findFirstByTeamIdAndUserIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamId, Long userId);
+
+    // 팀 인사이트 - 특정 기간(start 이상 ~ end 미만) 팀 전체 기록
+    List<TeamButtonRecord> findAllByTeamIdAndDeletedAtIsNullAndRecordedAtGreaterThanEqualAndRecordedAtLessThan(
+            Long teamId, LocalDateTime start, LocalDateTime end);
 }
