@@ -1,0 +1,20 @@
+package com.taptap.backend.team.repository;
+
+import com.taptap.backend.team.entity.TeamButtonRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonRecord, Long> {
+    Optional<TeamButtonRecord> findFirstByTeamButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamButtonId);
+
+    @Query("SELECT r FROM TeamButtonRecord r WHERE r.teamButtonId = :teamButtonId AND r.deletedAt IS NULL " +
+            "AND (:cursor IS NULL OR r.recordId < :cursor) ORDER BY r.recordId DESC")
+    List<TeamButtonRecord> findTimeline(@Param("teamButtonId") Long teamButtonId, @Param("cursor") Long cursor,
+                                         org.springframework.data.domain.Pageable pageable);
+
+    long countByTeamButtonIdAndUserIdAndDeletedAtIsNull(Long teamButtonId, Long userId);
+}
