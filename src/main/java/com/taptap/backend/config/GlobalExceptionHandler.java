@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.taptap.backend.button.exception.ButtonException;
 import com.taptap.backend.reminder.exception.ReminderException;
+import com.taptap.backend.team.exception.TeamException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -32,6 +33,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ReminderException.class)
     public ResponseEntity<ApiResponse<Object>> handleReminderException(ReminderException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ApiResponse<>(false, e.getMessage(), null));
+    }
+
+    @ExceptionHandler(TeamException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTeamException(TeamException e) {
         return ResponseEntity.status(e.getStatus())
                 .body(new ApiResponse<>(false, e.getMessage(), null));
     }
