@@ -93,6 +93,9 @@ public class TeamInsightService {
         LocalDate now = LocalDate.now();
         int y = year == null ? now.getYear() : year;
         int m = month == null ? now.getMonthValue() : month;
+        if (m < 1 || m > 12) {
+            throw new TeamException(HttpStatus.BAD_REQUEST, "유효하지 않은 월입니다. (1~12)");
+        }
         YearMonth yearMonth = YearMonth.of(y, m);
         Context ctx = buildContext(teamId);
 
