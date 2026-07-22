@@ -1,6 +1,7 @@
 package com.taptap.backend.team.service;
 
 import com.taptap.backend.team.dto.*;
+import com.taptap.backend.team.entity.Team;
 import com.taptap.backend.team.entity.TeamButton;
 import com.taptap.backend.team.entity.TeamButtonCategory;
 import com.taptap.backend.team.entity.TeamButtonRecord;
@@ -10,6 +11,7 @@ import com.taptap.backend.team.repository.TeamButtonCategoryRepository;
 import com.taptap.backend.team.repository.TeamButtonRecordRepository;
 import com.taptap.backend.team.repository.TeamButtonRepository;
 import com.taptap.backend.team.repository.TeamMemberRepository;
+import com.taptap.backend.team.repository.TeamRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +24,15 @@ import java.util.stream.Collectors;
 @Service
 public class TeamInsightService {
 
+    private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamButtonRepository teamButtonRepository;
     private final TeamButtonCategoryRepository teamButtonCategoryRepository;
     private final TeamButtonRecordRepository teamButtonRecordRepository;
 
-    public TeamInsightService(TeamMemberRepository teamMemberRepository, TeamButtonRepository teamButtonRepository,
+    public TeamInsightService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, TeamButtonRepository teamButtonRepository,
                                TeamButtonCategoryRepository teamButtonCategoryRepository, TeamButtonRecordRepository teamButtonRecordRepository) {
+        this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.teamButtonRepository = teamButtonRepository;
         this.teamButtonCategoryRepository = teamButtonCategoryRepository;
@@ -36,6 +40,7 @@ public class TeamInsightService {
     }
 
     public DailyInsightResponseDto getDailyInsight(Long userId, Long teamId, LocalDate targetDate) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
         LocalDate date = targetDate == null ? LocalDate.now() : targetDate;
         Context ctx = buildContext(teamId);
@@ -63,6 +68,7 @@ public class TeamInsightService {
     }
 
     public WeeklyInsightResponseDto getWeeklyInsight(Long userId, Long teamId, LocalDate weekStart) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
         LocalDate start = weekStart == null ? LocalDate.now().with(java.time.DayOfWeek.MONDAY) : weekStart;
         LocalDate end = start.plusDays(6);
@@ -89,6 +95,7 @@ public class TeamInsightService {
     }
 
     public MonthlyInsightResponseDto getMonthlyInsight(Long userId, Long teamId, Integer year, Integer month) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
         LocalDate now = LocalDate.now();
         int y = year == null ? now.getYear() : year;
@@ -242,6 +249,11 @@ public class TeamInsightService {
         if (!teamMemberRepository.existsByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)) {
             throw new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다.");
         }
+    }
+
+    private Team requireTeam(Long teamId) {
+        return teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
     }
 
     private record Context(Map<Long, TeamButton> buttons, Map<Long, TeamButtonCategory> categories, Map<Long, TeamMember> members) {

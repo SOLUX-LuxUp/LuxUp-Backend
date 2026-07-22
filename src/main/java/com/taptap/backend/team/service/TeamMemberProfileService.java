@@ -12,6 +12,7 @@ import com.taptap.backend.team.entity.TeamMemberButtonSharing;
 import com.taptap.backend.team.exception.TeamException;
 import com.taptap.backend.team.repository.TeamMemberButtonSharingRepository;
 import com.taptap.backend.team.repository.TeamMemberRepository;
+import com.taptap.backend.team.repository.TeamRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,15 +28,17 @@ public class TeamMemberProfileService {
 
     private static final int DEFAULT_RECORD_LIMIT = 30;
 
+    private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final ButtonRepository buttonRepository;
     private final ButtonCategoryRepository buttonCategoryRepository;
     private final ButtonRecordRepository buttonRecordRepository;
     private final TeamMemberButtonSharingRepository teamMemberButtonSharingRepository;
 
-    public TeamMemberProfileService(TeamMemberRepository teamMemberRepository, ButtonRepository buttonRepository,
+    public TeamMemberProfileService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, ButtonRepository buttonRepository,
                                      ButtonCategoryRepository buttonCategoryRepository, ButtonRecordRepository buttonRecordRepository,
                                      TeamMemberButtonSharingRepository teamMemberButtonSharingRepository) {
+        this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.buttonRepository = buttonRepository;
         this.buttonCategoryRepository = buttonCategoryRepository;
@@ -44,6 +47,7 @@ public class TeamMemberProfileService {
     }
 
     public TeamProfileResponseDto getProfile(Long userId, Long teamId) {
+        requireTeam(teamId);
         TeamMember member = requireMembership(teamId, userId);
         List<Button> buttons = buttonRepository.findByUserIdAndIsActiveTrue(userId);
         Map<Long, Boolean> sharedMap = sharedMap(teamId, userId);
@@ -58,6 +62,7 @@ public class TeamMemberProfileService {
 
     @Transactional
     public UpdateTeamProfileResponseDto updateProfile(Long userId, Long teamId, UpdateTeamProfileRequestDto request) {
+        requireTeam(teamId);
         TeamMember member = requireMembership(teamId, userId);
 
         if (request.displayName() != null && !request.displayName().isBlank()) {
@@ -72,6 +77,7 @@ public class TeamMemberProfileService {
     }
 
     public MemberRecordsResponseDto getMemberRecords(Long requesterId, Long teamId, Long targetUserId, Long cursor, Integer limit) {
+        requireTeam(teamId);
         requireMembership(teamId, requesterId);
         TeamMember target = teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(teamId, targetUserId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀원입니다."));
@@ -118,6 +124,7 @@ public class TeamMemberProfileService {
 
     @Transactional
     public UpdateButtonSharingResponseDto updateSharing(Long userId, Long teamId, UpdateButtonSharingRequestDto request) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
 
         if (request == null || request.buttons() == null || request.buttons().isEmpty()) {
@@ -172,5 +179,10 @@ public class TeamMemberProfileService {
     private TeamMember requireMembership(Long teamId, Long userId) {
         return teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)
                 .orElseThrow(() -> new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다."));
+    }
+
+    private void requireTeam(Long teamId) {
+        teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
     }
 }

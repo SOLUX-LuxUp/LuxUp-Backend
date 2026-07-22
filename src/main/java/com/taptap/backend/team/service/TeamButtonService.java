@@ -74,6 +74,7 @@ public class TeamButtonService {
     }
 
     public List<TeamButtonCategoryResponseDto> getCategories(Long userId, Long teamId) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
         return teamButtonCategoryRepository.findAllByTeamIdAndDeletedAtIsNullOrderByDisplayOrderAsc(teamId).stream()
                 .map(c -> new TeamButtonCategoryResponseDto(c.getCategoryId(), c.getCategoryName(), c.getCategoryColor(), c.getDisplayOrder()))
@@ -81,6 +82,7 @@ public class TeamButtonService {
     }
 
     public List<TeamButtonListItemDto> listButtons(Long userId, Long teamId) {
+        requireTeam(teamId);
         requireMembership(teamId, userId);
         List<TeamButton> buttons = teamButtonRepository.findAllByTeamIdAndIsActiveTrueAndDeletedAtIsNull(teamId);
         Map<Long, String> categoryNames = categoryNameMap(teamId);

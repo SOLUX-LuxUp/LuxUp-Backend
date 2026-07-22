@@ -256,11 +256,13 @@ public class TeamService {
         LocalDateTime now = LocalDateTime.now();
         team.setDeletedAt(now);
         teamRepository.save(team);
-        // TODO: deletedAt + 3일 시점에 하드 삭제(및 관련 팀 버튼/기록 정리)하는 배치/스케줄러 별도 구현 필요
+        // 실제 하드 삭제(및 관련 팀 버튼/카테고리/기록/공유설정 정리)는 TeamHardDeletionScheduler가
+        // deletedAt + 3일 시점에 매 정시 배치로 수행함
         return new DeleteTeamResponseDto(teamId, now, now.plusDays(3));
     }
 
     public List<TeamMemberListItemDto> listMembers(Long userId, Long teamId) {
+        findActiveTeam(teamId);
         if (!teamMemberRepository.existsByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)) {
             throw new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다.");
         }
