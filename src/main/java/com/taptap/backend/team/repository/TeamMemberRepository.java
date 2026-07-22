@@ -2,6 +2,7 @@ package com.taptap.backend.team.repository;
 
 import com.taptap.backend.team.entity.TeamMember;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,6 +14,11 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     List<TeamMember> findAllByTeamIdAndDeletedAtIsNullOrderByJoinedAtAsc(Long teamId);
     long countByTeamIdAndDeletedAtIsNull(Long teamId);
     boolean existsByTeamIdAndUserIdAndDeletedAtIsNull(Long teamId, Long userId);
+
+    // 팀 하드 삭제 배치 - 팀에 속한 모든 팀원 레코드 완전 삭제
+    @Modifying
+    @Query("DELETE FROM TeamMember m WHERE m.teamId = :teamId")
+    void deleteAllByTeamId(@Param("teamId") Long teamId);
 
     @Query("SELECT tm FROM TeamMember tm WHERE tm.teamId = :teamId AND tm.role = 'owner' AND tm.deletedAt IS NULL")
     Optional<TeamMember> findOwnerByTeamId(@Param("teamId") Long teamId);

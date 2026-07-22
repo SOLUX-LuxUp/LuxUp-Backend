@@ -2,6 +2,7 @@ package com.taptap.backend.team.repository;
 
 import com.taptap.backend.team.entity.TeamButtonRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +29,9 @@ public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonReco
 
     // 팀 목록 조회 - 팀 최근 기록(latestRecord) + 최근 활동 멤버(recentUpdatedMembers) 계산용
     List<TeamButtonRecord> findTop20ByTeamIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamId);
+
+    // 팀 하드 삭제 배치 - 팀에 속한 모든 팀 버튼 기록 완전 삭제
+    @Modifying
+    @Query("DELETE FROM TeamButtonRecord r WHERE r.teamId = :teamId")
+    void deleteAllByTeamId(@Param("teamId") Long teamId);
 }
