@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 public class TeamButtonService {
 
     private static final int DEFAULT_TIMELINE_LIMIT = 30;
+    private static final int MAX_BUTTON_NAME_LENGTH = 100;
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
@@ -48,10 +49,13 @@ public class TeamButtonService {
             requireCategoryInTeam(teamId, request.categoryId());
         }
 
+        String buttonName = isBlank(request.buttonName()) ? "새로운 버튼" : request.buttonName();
+        requireValidButtonNameLength(buttonName);
+
         TeamButton button = TeamButton.builder()
                 .teamId(teamId)
                 .categoryId(request.categoryId())
-                .buttonName(isBlank(request.buttonName()) ? "새로운 버튼" : request.buttonName())
+                .buttonName(buttonName)
                 .iconName(request.iconName())
                 .iconColor(request.iconColor())
                 .description(request.description())
@@ -67,6 +71,13 @@ public class TeamButtonService {
                 saved.getIconColor(), saved.getDescription(), saved.getTapPermission(), saved.getCategoryId(),
                 allowedUserIds, saved.getCreatedBy(), saved.getCreatedAt()
         );
+    }
+
+    public List<TeamButtonCategoryResponseDto> getCategories(Long userId, Long teamId) {
+        requireMembership(teamId, userId);
+        return teamButtonCategoryRepository.findAllByTeamIdAndDeletedAtIsNullOrderByDisplayOrderAsc(teamId).stream()
+                .map(c -> new TeamButtonCategoryResponseDto(c.getCategoryId(), c.getCategoryName(), c.getCategoryColor(), c.getDisplayOrder()))
+                .collect(Collectors.toList());
     }
 
     public List<TeamButtonListItemDto> listButtons(Long userId, Long teamId) {
@@ -100,10 +111,15 @@ public class TeamButtonService {
     }
 
     public TeamButtonDetailResponseDto getButtonDetail(Long userId, Long teamId, Long teamButtonId) {
-        requireMembership(teamId, userId);
+        Team team = requireTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
         TeamButton button = requireButton(teamId, teamButtonId);
         TeamMember creator = teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(teamId, button.getCreatedBy()).orElse(null);
         String categoryName = button.getCategoryId() == null ? null : categoryNameMap(teamId).get(button.getCategoryId());
+
+        boolean canEdit = hasEditPermission(team.getButtonEditPermission(), requester, button.getCreatedBy());
+        boolean canDelete = hasEditPermission(team.getButtonDeletePermission(), requester, button.getCreatedBy());
+        boolean isTeamOwner = requester.isOwner();
 
         TeamButtonUserSetting mySetting = teamButtonUserSettingRepository
                 .findByTeamButtonIdAndUserId(teamButtonId, userId).orElse(null);
@@ -124,7 +140,7 @@ public class TeamButtonService {
                 button.getTeamButtonId(), button.getTeamId(), button.getButtonName(), button.getIconName(),
                 button.getIconColor(), button.getDescription(), button.getTapPermission(), button.getIsActive(),
                 creator == null ? null : new MemberProfileDto(creator.getUserId(), creator.getDisplayName(), creator.getProfileImageUrl()),
-                myPermission, button.getCategoryId(), categoryName, allowedUserIds,
+                myPermission, canEdit, canDelete, isTeamOwner, button.getCategoryId(), categoryName, allowedUserIds,
                 buildLatestSummary(teamButtonId), button.getCreatedAt(), button.getUpdatedAt()
         );
     }
@@ -137,6 +153,7 @@ public class TeamButtonService {
         requireEditPermission(team.getButtonEditPermission(), requester, button.getCreatedBy());
 
         if (request.buttonName() != null && !request.buttonName().isBlank()) {
+            requireValidButtonNameLength(request.buttonName());
             button.setButtonName(request.buttonName());
         }
         if (request.iconName() != null) button.setIconName(request.iconName());
@@ -211,7 +228,7 @@ public class TeamButtonService {
         TeamButtonTimelineItemDto latest = record == null ? null : new TeamButtonTimelineItemDto(
                 record.getRecordId(), record.getRecordedAt(), record.getMemo(), record.getEmoji(), memberProfile(teamId, record.getUserId())
         );
-        return new LatestRecordResponseDto(teamButtonId, button.getButtonName(), latest);
+        return new LatestRecordResponseDto(teamButtonId, button.getButtonName(), button.getIconName(), button.getIconColor(), latest);
     }
 
     public TeamButtonTimelineResponseDto getTimeline(Long userId, Long teamId, Long teamButtonId, Long cursor, Integer limit) {
@@ -296,8 +313,6 @@ public class TeamButtonService {
 
     private boolean hasTapPermission(TeamButton button, Long userId) {
         return switch (button.getTapPermission()) {
-            case "owner_only" -> teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(button.getTeamId(), userId)
-                    .map(TeamMember::isOwner).orElse(false);
             case "custom" -> teamButtonUserSettingRepository.findByTeamButtonIdAndUserId(button.getTeamButtonId(), userId)
                     .map(s -> s.getHasTapPermission() && "granted".equals(s.getPermissionStatus())).orElse(false);
             default -> true; // all
@@ -311,13 +326,22 @@ public class TeamButtonService {
     }
 
     private void requireEditPermission(String permission, TeamMember requester, Long createdBy) {
+        if (!hasEditPermission(permission, requester, createdBy)) {
+            throw new TeamException(HttpStatus.FORBIDDEN, "해당 작업에 대한 권한이 없습니다.");
+        }
+    }
+
+    private boolean hasEditPermission(String permission, TeamMember requester, Long createdBy) {
         if (requester.isOwner()) {
-            return;
+            return true;
         }
-        if ("creator_or_leader".equals(permission) && requester.getUserId().equals(createdBy)) {
-            return;
+        return "creator_or_leader".equals(permission) && requester.getUserId().equals(createdBy);
+    }
+
+    private void requireValidButtonNameLength(String buttonName) {
+        if (buttonName.length() > MAX_BUTTON_NAME_LENGTH) {
+            throw new TeamException(HttpStatus.BAD_REQUEST, "버튼 이름은 최대 " + MAX_BUTTON_NAME_LENGTH + "자까지 입력 가능합니다.");
         }
-        throw new TeamException(HttpStatus.FORBIDDEN, "해당 작업에 대한 권한이 없습니다.");
     }
 
     private void requireCategoryInTeam(Long teamId, Long categoryId) {
