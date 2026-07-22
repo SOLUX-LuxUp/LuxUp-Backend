@@ -34,6 +34,15 @@ public class TeamButtonController {
                 .body(ApiResponse.success("팀 공유 버튼이 생성되었습니다.", response));
     }
 
+    @GetMapping("/categories")
+    public ApiResponse<List<TeamButtonCategoryResponseDto>> getCategories(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("팀 버튼 카테고리 목록 조회에 성공했습니다.", teamButtonService.getCategories(userId, teamId));
+    }
+
     @GetMapping
     public ApiResponse<List<TeamButtonListItemDto>> listButtons(
             Authentication authentication,

@@ -44,7 +44,7 @@ public class TeamButton {
     // tapPermission(실행 권한)만 버튼별 개별 설정 유지 (디자인상 버튼 생성 화면에 있음)
     @Builder.Default
     @Column(name = "tap_permission", nullable = false, length = 20)
-    private String tapPermission = "all"; // all / owner_only / custom
+    private String tapPermission = "all"; // all / custom (팀장도 일반 멤버와 동일하게 custom의 allowedUserIds에 포함되어야 선택 가능 — 별도 owner_only 옵션 없음, 디자인 확인 완료)
 
     @Builder.Default
     @Column(name = "is_active", nullable = false)
