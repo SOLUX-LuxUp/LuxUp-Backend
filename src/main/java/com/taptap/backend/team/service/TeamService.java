@@ -55,10 +55,7 @@ public class TeamService {
                 : request.teamName();
 
         Integer maxMember = request.maxMember() == null ? 10 : request.maxMember();
-        // ⚠️ 디자인 상 선택 가능 값이 5/10/15로 보임. 확정되면 아래 유효성 검사를 enum 체크로 교체할 것.
-        if (maxMember < 2 || maxMember > 100) {
-            throw new TeamException(HttpStatus.BAD_REQUEST, "팀 최대 인원 값이 올바르지 않습니다.");
-        }
+        requireValidMaxMember(maxMember);
 
         Team team = Team.builder()
                 .teamName(teamName)
@@ -185,6 +182,7 @@ public class TeamService {
             team.setIconColor(request.iconColor());
         }
         if (request.maxMember() != null) {
+            requireValidMaxMember(request.maxMember());
             long currentMemberCount = teamMemberRepository.countByTeamIdAndDeletedAtIsNull(teamId);
             if (request.maxMember() < currentMemberCount) {
                 throw new TeamException(HttpStatus.BAD_REQUEST, "최대 인원은 현재 팀원 수보다 작을 수 없습니다.");
@@ -367,6 +365,15 @@ public class TeamService {
                 recentUpdatedMembers,
                 team.getUpdatedAt()
         );
+    }
+
+    // 팀 최대 인원: 5단위 스텝, 상한 30 (기획 확정: 하연/누리 논의 결과)
+    private static final java.util.Set<Integer> VALID_MAX_MEMBER_VALUES = java.util.Set.of(5, 10, 15, 20, 25, 30);
+
+    private void requireValidMaxMember(Integer maxMember) {
+        if (!VALID_MAX_MEMBER_VALUES.contains(maxMember)) {
+            throw new TeamException(HttpStatus.BAD_REQUEST, "팀 최대 인원은 5명 단위로 5~30명 사이여야 합니다.");
+        }
     }
 
     private String defaultTeamName(Long userId) {
