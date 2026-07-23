@@ -253,6 +253,44 @@ public class TeamButtonService {
     }
 
     @Transactional
+    public UpdateTeamButtonRecordDetailResponseDto updateRecordDetail(
+            Long userId, Long teamId, Long teamButtonId, Long recordId, UpdateTeamButtonRecordDetailRequestDto request
+    ) {
+        requireTeam(teamId);
+        requireMembership(teamId, userId);
+        requireButton(teamId, teamButtonId);
+
+        if (request.getMemo() == null && request.getEmoji() == null) {
+            throw new TeamException(HttpStatus.BAD_REQUEST, "memo, emoji 중 하나는 포함되어야 합니다.");
+        }
+
+        TeamButtonRecord record = requireOwnRecord(teamButtonId, recordId, userId);
+
+        if (request.getMemo() != null) {
+            record.setMemo(request.getMemo().orElse(null));
+        }
+        if (request.getEmoji() != null) {
+            record.setEmoji(request.getEmoji().orElse(null));
+        }
+        TeamButtonRecord saved = teamButtonRecordRepository.save(record);
+
+        return new UpdateTeamButtonRecordDetailResponseDto(
+                saved.getRecordId(), saved.getTeamButtonId(), saved.getMemo(), saved.getEmoji(), saved.getRecordedAt()
+        );
+    }
+
+    @Transactional
+    public void deleteRecord(Long userId, Long teamId, Long teamButtonId, Long recordId) {
+        requireTeam(teamId);
+        requireMembership(teamId, userId);
+        requireButton(teamId, teamButtonId);
+
+        TeamButtonRecord record = requireOwnRecord(teamButtonId, recordId, userId);
+        record.setDeletedAt(LocalDateTime.now());
+        teamButtonRecordRepository.save(record);
+    }
+
+    @Transactional
     public NotificationToggleResponseDto toggleNotification(Long userId, Long teamId, Long teamButtonId) {
         requireMembership(teamId, userId);
         requireButton(teamId, teamButtonId);
@@ -378,6 +416,16 @@ public class TeamButtonService {
     private TeamButton requireButton(Long teamId, Long teamButtonId) {
         return teamButtonRepository.findByTeamButtonIdAndTeamIdAndDeletedAtIsNull(teamButtonId, teamId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀 또는 버튼입니다."));
+    }
+
+    // 기록 수정/삭제 - 본인 기록만 가능 (개인 버튼의 findOwnedRecord와 동일한 원칙)
+    private TeamButtonRecord requireOwnRecord(Long teamButtonId, Long recordId, Long userId) {
+        TeamButtonRecord record = teamButtonRecordRepository.findByRecordIdAndTeamButtonIdAndDeletedAtIsNull(recordId, teamButtonId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 기록입니다."));
+        if (!record.getUserId().equals(userId)) {
+            throw new TeamException(HttpStatus.FORBIDDEN, "본인 기록이 아닙니다.");
+        }
+        return record;
     }
 
     private boolean isBlank(String s) {

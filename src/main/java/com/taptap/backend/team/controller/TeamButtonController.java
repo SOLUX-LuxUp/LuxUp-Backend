@@ -118,6 +118,31 @@ public class TeamButtonController {
         return ApiResponse.success("기록 타임라인 조회에 성공했습니다.", teamButtonService.getTimeline(userId, teamId, teamButtonId, cursor, limit));
     }
 
+    @PatchMapping("/{team_button_id}/records/{record_id}/detail")
+    public ApiResponse<UpdateTeamButtonRecordDetailResponseDto> updateRecordDetail(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId,
+            @PathVariable("team_button_id") Long teamButtonId,
+            @PathVariable("record_id") Long recordId,
+            @RequestBody UpdateTeamButtonRecordDetailRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("기록이 수정되었습니다.",
+                teamButtonService.updateRecordDetail(userId, teamId, teamButtonId, recordId, request));
+    }
+
+    @DeleteMapping("/{team_button_id}/records/{record_id}")
+    public ApiResponse<Void> deleteRecord(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId,
+            @PathVariable("team_button_id") Long teamButtonId,
+            @PathVariable("record_id") Long recordId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        teamButtonService.deleteRecord(userId, teamId, teamButtonId, recordId);
+        return ApiResponse.<Void>success("기록이 삭제되었습니다.", null);
+    }
+
     @PatchMapping("/{team_button_id}/notification")
     public ApiResponse<NotificationToggleResponseDto> toggleNotification(
             Authentication authentication,
