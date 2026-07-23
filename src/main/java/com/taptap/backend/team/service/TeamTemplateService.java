@@ -133,10 +133,28 @@ public class TeamTemplateService {
         Team team = requireTeam(teamId);
 
         if (team.getTemplateId() == null) {
-            return new TeamTemplateStatusResponseDto(false, null, null, null);
+            return new TeamTemplateStatusResponseDto(false, null, null, null, Boolean.TRUE.equals(team.getTemplateSkipped()));
         }
         TeamTemplateDto template = findTemplate(team.getTemplateId());
-        return new TeamTemplateStatusResponseDto(true, template.templateId(), template.templateType(), template.templateName());
+        return new TeamTemplateStatusResponseDto(true, template.templateId(), template.templateType(), template.templateName(), false);
+    }
+
+    @Transactional
+    public SkipTeamTemplateResponseDto skipTemplate(Long userId, Long teamId) {
+        Team team = requireTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
+
+        if (!requester.isOwner()) {
+            throw new TeamException(HttpStatus.FORBIDDEN, "팀장 권한이 없습니다.");
+        }
+        if (team.getTemplateId() != null) {
+            throw new TeamException(HttpStatus.CONFLICT, "이미 템플릿을 선택한 팀입니다. 템플릿은 한 번만 선택할 수 있습니다.");
+        }
+
+        team.setTemplateSkipped(true);
+        teamRepository.save(team);
+
+        return new SkipTeamTemplateResponseDto(teamId, true);
     }
 
     @Transactional

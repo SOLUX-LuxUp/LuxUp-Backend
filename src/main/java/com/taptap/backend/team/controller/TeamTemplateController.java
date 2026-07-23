@@ -49,6 +49,16 @@ public class TeamTemplateController {
     }
 
     @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/api/teams/{team_id}/template/skip")
+    public ApiResponse<SkipTeamTemplateResponseDto> skipTemplate(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("템플릿 선택을 건너뛰었습니다.", teamTemplateService.skipTemplate(userId, teamId));
+    }
+
+    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/api/teams/{team_id}/template/suggestions")
     public ApiResponse<List<TemplateSuggestionDto>> getSuggestions(
             Authentication authentication,
