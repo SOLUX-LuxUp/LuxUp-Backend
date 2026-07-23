@@ -17,7 +17,7 @@ public class Reminder {
     @Column(name = "reminder_id")
     private Long reminderId;
 
-    @Column(name = "button_id", nullable = false, unique = true)
+    @Column(name = "button_id", nullable = false)
     private Long buttonId;
 
     @Column(name = "is_enabled", nullable = false)
@@ -110,6 +110,11 @@ public class Reminder {
     }
 
     public void disable() {
+        this.isEnabled = false;
+    }
+
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
         this.isEnabled = false;
     }
 
