@@ -12,6 +12,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.taptap.backend.user.dto.PasswordChangeRequestDto;
+import com.taptap.backend.user.service.UserPasswordService;
 
 @Tag(name = "User", description = "유저 프로필 · 계정 관리 API")
 @RestController
@@ -20,10 +22,12 @@ public class UserController {
 
     private final AuthService authService;
     private final UserProfileService userProfileService;
+    private final UserPasswordService userPasswordService;
 
-    public UserController(AuthService authService, UserProfileService userProfileService) {
+    public UserController(AuthService authService, UserProfileService userProfileService, UserPasswordService userPasswordService) {
         this.authService = authService;
         this.userProfileService = userProfileService;
+        this.userPasswordService = userPasswordService;
     }
 
     @Operation(summary = "9.1 유저 프로필 조회")
@@ -57,5 +61,17 @@ public class UserController {
         Long userId = (Long) authentication.getPrincipal();
         authService.withdraw(userId, request);
         return ApiResponse.<Void>success("회원탈퇴가 완료되었습니다.", null);
+    }
+
+    @Operation(summary = "비밀번호 변경")
+    @SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/password")
+    public ApiResponse<Void> changePassword(
+            Authentication authentication,
+            @Valid @RequestBody PasswordChangeRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        userPasswordService.changePassword(userId, request);
+        return ApiResponse.<Void>success("비밀번호가 변경되었습니다.", null);
     }
 }
