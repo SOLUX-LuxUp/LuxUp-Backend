@@ -101,6 +101,16 @@ public class ReminderService {
         expired.forEach(Reminder::disable);
     }
 
+    @Transactional
+    public void deleteReminder(Long userId, Long buttonId) {
+        validateOwnedActiveButton(userId, buttonId);
+
+        Reminder reminder = reminderRepository.findByButtonIdAndDeletedAtIsNull(buttonId)
+                .orElseThrow(() -> new ReminderException(HttpStatus.NOT_FOUND, "존재하지 않는 알림 설정입니다."));
+
+        reminder.softDelete();
+    }
+
     private void validateOwnedActiveButton(Long userId, Long buttonId) {
         Button button = buttonRepository.findById(buttonId)
                 .orElseThrow(() -> new ReminderException(HttpStatus.NOT_FOUND, "존재하지 않는 버튼입니다."));

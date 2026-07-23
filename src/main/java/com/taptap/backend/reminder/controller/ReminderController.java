@@ -57,4 +57,13 @@ public class ReminderController {
                 : "알림이 비활성화되었습니다.";
         return ApiResponse.success(message, data);
     }
+
+    @DeleteMapping("/{button_id}")
+    public ApiResponse<Object> deleteReminder(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable("button_id") Long buttonId
+    ) {
+        reminderService.deleteReminder(userId, buttonId);
+        return ApiResponse.success("알림 설정이 삭제되었습니다.", null);
+    }
 }
