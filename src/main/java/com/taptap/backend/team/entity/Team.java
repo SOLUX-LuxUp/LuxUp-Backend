@@ -54,6 +54,11 @@ public class Team {
     @Column(name = "template_id")
     private Long templateId;
 
+    // 템플릿 선택을 명시적으로 건너뛴 팀인지 (templateId=null인 이유가 "아직 결정 안 함"인지 "건너뜀"인지 구분하기 위함)
+    @Builder.Default
+    @Column(name = "template_skipped", nullable = false)
+    private Boolean templateSkipped = false;
+
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 

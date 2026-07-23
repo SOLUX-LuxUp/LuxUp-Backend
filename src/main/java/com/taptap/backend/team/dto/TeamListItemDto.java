@@ -10,6 +10,7 @@ public record TeamListItemDto(
         String iconName,
         String iconColor,
         Boolean isFavorite,
+        Boolean isOwner,
         Integer maxMember,
         Long memberCount,
         List<MemberProfileDto> memberProfiles,

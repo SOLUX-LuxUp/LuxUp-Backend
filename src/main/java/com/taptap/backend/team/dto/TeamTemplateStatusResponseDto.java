@@ -4,6 +4,7 @@ public record TeamTemplateStatusResponseDto(
         Boolean hasSelectedTemplate,
         Long templateId,
         String templateType,
-        String templateName
+        String templateName,
+        Boolean isSkipped
 ) {
 }

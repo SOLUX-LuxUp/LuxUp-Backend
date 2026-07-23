@@ -316,11 +316,13 @@ public class TeamService {
     private TeamListItemDto toListItem(Team team, Long requestingUserId) {
         List<TeamMember> members = teamMemberRepository.findAllByTeamIdAndDeletedAtIsNullOrderByJoinedAtAsc(team.getTeamId());
 
-        boolean isFavorite = members.stream()
+        TeamMember requestingMember = members.stream()
                 .filter(m -> m.getUserId().equals(requestingUserId))
                 .findFirst()
-                .map(TeamMember::getIsFavorite)
-                .orElse(false);
+                .orElse(null);
+
+        boolean isFavorite = requestingMember != null && Boolean.TRUE.equals(requestingMember.getIsFavorite());
+        boolean isOwner = requestingMember != null && requestingMember.isOwner();
 
         List<MemberProfileDto> profiles = members.stream()
                 .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl()))
@@ -360,6 +362,7 @@ public class TeamService {
                 team.getIconName(),
                 team.getIconColor(),
                 isFavorite,
+                isOwner,
                 team.getMaxMember(),
                 (long) members.size(),
                 profiles,
