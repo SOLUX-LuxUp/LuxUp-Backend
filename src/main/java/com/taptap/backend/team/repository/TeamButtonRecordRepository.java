@@ -13,6 +13,9 @@ import java.util.Optional;
 public interface TeamButtonRecordRepository extends JpaRepository<TeamButtonRecord, Long> {
     Optional<TeamButtonRecord> findFirstByTeamButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(Long teamButtonId);
 
+    // 기록 수정/삭제 - 본인 기록인지 확인하기 위해 단건 조회 (버튼 소속 검증 포함)
+    Optional<TeamButtonRecord> findByRecordIdAndTeamButtonIdAndDeletedAtIsNull(Long recordId, Long teamButtonId);
+
     @Query("SELECT r FROM TeamButtonRecord r WHERE r.teamButtonId = :teamButtonId AND r.deletedAt IS NULL " +
             "AND (:cursor IS NULL OR r.recordId < :cursor) ORDER BY r.recordId DESC")
     List<TeamButtonRecord> findTimeline(@Param("teamButtonId") Long teamButtonId, @Param("cursor") Long cursor,
