@@ -141,8 +141,8 @@ public class TeamService {
     }
 
     public TeamSettingsResponseDto getSettings(Long userId, Long teamId) {
-        requireOwner(teamId, userId);
         Team team = findActiveTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
         long memberCount = teamMemberRepository.countByTeamIdAndDeletedAtIsNull(teamId);
         Long ownerUserId = teamMemberRepository.findOwnerByTeamId(teamId)
                 .map(TeamMember::getUserId)
@@ -160,8 +160,19 @@ public class TeamService {
                 team.getButtonCreatePermission(),
                 team.getButtonEditPermission(),
                 team.getButtonDeletePermission(),
-                ownerUserId
+                ownerUserId,
+                requester.getIsNotification()
         );
+    }
+
+    // 팀 알림 설정 — 요청자(본인) 기준 팀 전체 알림 on/off 토글 (team_member.is_notification 사용)
+    @Transactional
+    public TeamNotificationToggleResponseDto toggleNotification(Long userId, Long teamId) {
+        findActiveTeam(teamId);
+        TeamMember member = requireMembership(teamId, userId);
+        member.setIsNotification(!Boolean.TRUE.equals(member.getIsNotification()));
+        teamMemberRepository.save(member);
+        return new TeamNotificationToggleResponseDto(teamId, userId, member.getIsNotification());
     }
 
     @Transactional
@@ -308,6 +319,12 @@ public class TeamService {
         return member;
     }
 
+    // GET /settings, 팀 알림 설정 등 팀장 여부와 무관하게 "가입한 멤버"이기만 하면 되는 액션에 사용
+    private TeamMember requireMembership(Long teamId, Long userId) {
+        return teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)
+                .orElseThrow(() -> new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다."));
+    }
+
     private Team findActiveTeam(Long teamId) {
         return teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
@@ -368,6 +385,8 @@ public class TeamService {
                 profiles,
                 latestRecord,
                 recentUpdatedMembers,
+                team.getDeletedAt() != null,
+                team.getScheduledDeletionAt(),
                 team.getUpdatedAt()
         );
     }

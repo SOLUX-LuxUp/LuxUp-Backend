@@ -67,6 +67,15 @@ public class TeamController {
         return ApiResponse.success("팀 설정이 수정되었습니다.", teamService.updateSettings(userId, teamId, request));
     }
 
+    @PatchMapping("/{team_id}/notification")
+    public ApiResponse<TeamNotificationToggleResponseDto> toggleNotification(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("팀 알림 설정이 변경되었습니다.", teamService.toggleNotification(userId, teamId));
+    }
+
     @PatchMapping("/{team_id}/favorite")
     public ApiResponse<FavoriteResponseDto> toggleFavorite(
             Authentication authentication,
