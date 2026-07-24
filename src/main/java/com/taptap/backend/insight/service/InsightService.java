@@ -111,6 +111,8 @@ public class InsightService {
                     return ButtonTapCountDto.builder()
                             .buttonId(btn.getButtonId())
                             .buttonName(btn.getButtonName())
+                            .iconName(btn.getIconName())
+                            .iconColor(btn.getIconColor())
                             .count(e.getValue().intValue())
                             .ratio(ratio)
                             .build();
@@ -125,6 +127,8 @@ public class InsightService {
                             .recordId(r.getRecordId())
                             .buttonId(r.getButtonId())
                             .buttonName(btn != null ? btn.getButtonName() : null)
+                            .iconName(btn != null ? btn.getIconName() : null)
+                            .iconColor(btn != null ? btn.getIconColor() : null)
                             .recordedAt(r.getRecordedAt())
                             .memo(r.getMemo())
                             .emoji(r.getEmoji())
@@ -259,6 +263,8 @@ public class InsightService {
                     return ButtonTapCountDto.builder()
                             .buttonId(btn.getButtonId())
                             .buttonName(btn.getButtonName())
+                            .iconName(btn.getIconName())
+                            .iconColor(btn.getIconColor())
                             .count(e.getValue().intValue())
                             .ratio(ratio)
                             .build();
@@ -285,6 +291,8 @@ public class InsightService {
         WeeklyTopButtonDto topButton = WeeklyTopButtonDto.builder()
                 .buttonId(topBtn.getButtonId())
                 .buttonName(topBtn.getButtonName())
+                .iconName(topBtn.getIconName())
+                .iconColor(topBtn.getIconColor())
                 .count(topEntry.getValue().intValue())
                 .build();
 
@@ -356,6 +364,8 @@ public class InsightService {
             prevTopButton = WeeklyTopButtonDto.builder()
                     .buttonId(prevTopBtn.getButtonId())
                     .buttonName(prevTopBtn.getButtonName())
+                    .iconName(prevTopBtn.getIconName())
+                    .iconColor(prevTopBtn.getIconColor())
                     .count(prevTopEntry.getValue().intValue())
                     .build();
         }

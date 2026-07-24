@@ -18,6 +18,8 @@ public class InsightTimelineItemDto {
     private Long recordId;
     private Long buttonId;
     private String buttonName;
+    private String iconName;
+    private String iconColor;
     private LocalDateTime recordedAt;
     private String memo;
     private String emoji;
