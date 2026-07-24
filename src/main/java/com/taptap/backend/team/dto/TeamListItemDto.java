@@ -16,6 +16,8 @@ public record TeamListItemDto(
         List<MemberProfileDto> memberProfiles,
         TeamLatestRecordDto latestRecord,
         List<MemberProfileDto> recentUpdatedMembers,
+        Boolean isDeleting,
+        LocalDateTime scheduledDeletionAt,
         LocalDateTime updatedAt
 ) {
 }

@@ -12,6 +12,7 @@ public record TeamSettingsResponseDto(
         String buttonCreatePermission,
         String buttonEditPermission,
         String buttonDeletePermission,
-        Long ownerUserId
+        Long ownerUserId,
+        Boolean notificationEnabled
 ) {
 }
