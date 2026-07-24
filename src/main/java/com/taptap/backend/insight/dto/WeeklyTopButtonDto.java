@@ -8,5 +8,7 @@ import lombok.Getter;
 public class WeeklyTopButtonDto {
     private Long buttonId;
     private String buttonName;
+    private String iconName;
+    private String iconColor;
     private int count;
 }
