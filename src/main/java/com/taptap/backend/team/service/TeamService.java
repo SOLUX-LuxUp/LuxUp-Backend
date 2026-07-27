@@ -141,7 +141,9 @@ public class TeamService {
     }
 
     public TeamSettingsResponseDto getSettings(Long userId, Long teamId) {
-        Team team = findActiveTeam(teamId);
+        // 삭제 유예(3일) 중인 팀도 설정 화면에서 삭제 예정 배너를 계속 보여줘야 하므로,
+        // findActiveTeam(deletedAt IS NULL 필터)이 아니라 deletedAt 여부와 무관하게 조회함
+        Team team = requireTeamIncludingDeleting(teamId);
         TeamMember requester = requireMembership(teamId, userId);
         long memberCount = teamMemberRepository.countByTeamIdAndDeletedAtIsNull(teamId);
         Long ownerUserId = teamMemberRepository.findOwnerByTeamId(teamId)
@@ -161,7 +163,9 @@ public class TeamService {
                 team.getButtonEditPermission(),
                 team.getButtonDeletePermission(),
                 ownerUserId,
-                requester.getIsNotification()
+                requester.getIsNotification(),
+                team.getDeletedAt() != null,
+                team.getScheduledDeletionAt()
         );
     }
 
@@ -327,6 +331,13 @@ public class TeamService {
 
     private Team findActiveTeam(Long teamId) {
         return teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
+    }
+
+    // GET /settings처럼 삭제 유예(3일) 중인 팀도 계속 조회 가능해야 하는 화면에서 사용.
+    // 실제 하드 삭제(팀 row 자체 삭제) 이후에만 404
+    private Team requireTeamIncludingDeleting(Long teamId) {
+        return teamRepository.findById(teamId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
     }
 
