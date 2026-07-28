@@ -15,4 +15,6 @@ public interface ButtonCategoryRepository extends JpaRepository<ButtonCategory, 
 
     @Query("SELECT MAX(c.displayOrder) FROM ButtonCategory c WHERE c.userId = :userId AND c.deletedAt IS NULL")
     Integer findMaxDisplayOrderByUserId(@Param("userId") Long userId);
+
+    List<ButtonCategory> findByUserIdAndDeletedAtIsNullOrderByDisplayOrderAsc(Long userId);
 }
