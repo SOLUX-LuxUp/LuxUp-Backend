@@ -53,6 +53,13 @@ public class ButtonCategoryService {
         return new CategoryResponseDto(saved.getCategoryId(), saved.getCategoryName(), saved.getDisplayOrder(), saved.getCreatedAt());
     }
 
+    @Transactional(readOnly = true)
+    public List<CategoryResponseDto> getCategories(Long userId) {
+        return buttonCategoryRepository.findByUserIdAndDeletedAtIsNullOrderByDisplayOrderAsc(userId).stream()
+                .map(c -> new CategoryResponseDto(c.getCategoryId(), c.getCategoryName(), c.getDisplayOrder(), c.getCreatedAt()))
+                .toList();
+    }
+
     @Transactional
     public void deleteCategory(Long userId, Long categoryId, boolean deleteButtons) {
         ButtonCategory category = buttonCategoryRepository.findById(categoryId)

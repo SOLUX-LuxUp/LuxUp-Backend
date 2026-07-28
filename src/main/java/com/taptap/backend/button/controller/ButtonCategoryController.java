@@ -1,5 +1,6 @@
 package com.taptap.backend.button.controller;
 
+import java.util.List;
 import com.taptap.backend.button.dto.*;
 import com.taptap.backend.button.service.ButtonCategoryService;
 import com.taptap.backend.config.ApiResponse;
@@ -39,6 +40,12 @@ public class ButtonCategoryController {
     ) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.success("카테고리 이름이 수정되었습니다.", buttonCategoryService.updateCategoryName(userId, categoryId, request));
+    }
+
+    @GetMapping
+    public ApiResponse<List<CategoryResponseDto>> getCategories(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("카테고리 목록 조회가 완료되었습니다.", buttonCategoryService.getCategories(userId));
     }
 
     @DeleteMapping("/{category_id}")
