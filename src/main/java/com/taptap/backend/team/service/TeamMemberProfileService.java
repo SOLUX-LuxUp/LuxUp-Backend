@@ -181,8 +181,10 @@ public class TeamMemberProfileService {
                 .orElseThrow(() -> new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다."));
     }
 
+    // 삭제 유예(3일) 중인 팀도 프로필/공유 설정 기능을 계속 사용할 수 있어야 하므로
+    // deletedAt 여부와 무관하게 조회함 (기획 확정: 김누리님, 2026-07-28 — 삭제 전까지 기존 기능 그대로 유지)
     private void requireTeam(Long teamId) {
-        teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
+        teamRepository.findById(teamId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
     }
 }

@@ -170,19 +170,21 @@ public class TeamService {
     }
 
     // 팀 알림 설정 — 요청자(본인) 기준 팀 전체 알림 on/off 토글 (team_member.is_notification 사용)
+    // 삭제 유예(3일) 중에도 계속 토글 가능 — 기획 확정(김누리님, 2026-07-28): 삭제는 예정대로 진행되고 그 전까지 쓰던 기능은 전부 그대로 유지
     @Transactional
     public TeamNotificationToggleResponseDto toggleNotification(Long userId, Long teamId) {
-        findActiveTeam(teamId);
+        requireTeamIncludingDeleting(teamId);
         TeamMember member = requireMembership(teamId, userId);
         member.setIsNotification(!Boolean.TRUE.equals(member.getIsNotification()));
         teamMemberRepository.save(member);
         return new TeamNotificationToggleResponseDto(teamId, userId, member.getIsNotification());
     }
 
+    // 삭제 유예(3일) 중에도 계속 수정 가능 — 기획 확정(김누리님, 2026-07-28): 삭제는 예정대로 진행되고 그 전까지 쓰던 기능은 전부 그대로 유지
     @Transactional
     public UpdateTeamSettingsResponseDto updateSettings(Long userId, Long teamId, UpdateTeamSettingsRequestDto request) {
         requireOwner(teamId, userId);
-        Team team = findActiveTeam(teamId);
+        Team team = requireTeamIncludingDeleting(teamId);
 
         if (request.teamName() != null && !request.teamName().isBlank()) {
             team.setTeamName(request.teamName());
@@ -276,8 +278,9 @@ public class TeamService {
         return new DeleteTeamResponseDto(teamId, now, now.plusDays(3));
     }
 
+    // 삭제 유예(3일) 중에도 계속 조회 가능 — 기획 확정(김누리님, 2026-07-28): 삭제는 예정대로 진행되고 그 전까지 쓰던 기능은 전부 그대로 유지
     public List<TeamMemberListItemDto> listMembers(Long userId, Long teamId) {
-        findActiveTeam(teamId);
+        requireTeamIncludingDeleting(teamId);
         if (!teamMemberRepository.existsByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)) {
             throw new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다.");
         }
