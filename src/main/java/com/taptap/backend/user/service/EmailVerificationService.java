@@ -61,6 +61,7 @@ public class EmailVerificationService {
 
     private void sendMail(String email, String code) {
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom("ukibest333@gmail.com");
         message.setTo(email);
         message.setSubject("[TapTap] 이메일 인증코드");
         message.setText("인증코드: " + code + " (5분 이내 입력해주세요.)");
