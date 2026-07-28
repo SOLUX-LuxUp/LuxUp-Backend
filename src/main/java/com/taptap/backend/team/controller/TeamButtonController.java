@@ -43,6 +43,41 @@ public class TeamButtonController {
         return ApiResponse.success("팀 버튼 카테고리 목록 조회에 성공했습니다.", teamButtonService.getCategories(userId, teamId));
     }
 
+    @PostMapping("/categories")
+    public ResponseEntity<ApiResponse<CreateTeamButtonCategoryResponseDto>> createCategory(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId,
+            @RequestBody CreateTeamButtonCategoryRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        CreateTeamButtonCategoryResponseDto response = teamButtonService.createCategory(userId, teamId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("팀 버튼 카테고리가 생성되었습니다.", response));
+    }
+
+    @PatchMapping("/categories/{category_id}")
+    public ApiResponse<UpdateTeamButtonCategoryResponseDto> updateCategory(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId,
+            @PathVariable("category_id") Long categoryId,
+            @RequestBody UpdateTeamButtonCategoryRequestDto request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.success("팀 버튼 카테고리가 수정되었습니다.", teamButtonService.updateCategory(userId, teamId, categoryId, request));
+    }
+
+    @DeleteMapping("/categories/{category_id}")
+    public ApiResponse<Object> deleteCategory(
+            Authentication authentication,
+            @PathVariable("team_id") Long teamId,
+            @PathVariable("category_id") Long categoryId,
+            @RequestParam("delete_buttons") Boolean deleteButtons
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        teamButtonService.deleteCategory(userId, teamId, categoryId, deleteButtons);
+        return ApiResponse.success("팀 버튼 카테고리가 삭제되었습니다.", null);
+    }
+
     @GetMapping
     public ApiResponse<List<TeamButtonListItemDto>> listButtons(
             Authentication authentication,
