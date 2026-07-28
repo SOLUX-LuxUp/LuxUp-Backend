@@ -244,8 +244,11 @@ public class TeamTemplateService {
                 .orElseThrow(() -> new TeamException(HttpStatus.FORBIDDEN, "팀 미가입 유저입니다."));
     }
 
+    // 삭제 유예(3일) 중인 팀도 템플릿 관련 기능을 계속 사용할 수 있어야 하므로
+    // deletedAt 여부와 무관하게 조회함 (기획 확정: 김누리님, 2026-07-28 — 삭제 전까지 기존 기능 그대로 유지)
+    // 이 변경으로 "템플릿 선택했던 팀이 삭제 유예 중 건너뛴 팀으로 오인되던" 버그도 함께 해결됨
     private Team requireTeam(Long teamId) {
-        return teamRepository.findByTeamIdAndDeletedAtIsNull(teamId)
+        return teamRepository.findById(teamId)
                 .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀입니다."));
     }
 }
