@@ -81,6 +81,87 @@ public class TeamButtonService {
                 .collect(Collectors.toList());
     }
 
+    // 카테고리 생성 권한 확정(하연님 확인, 2026-07-29): 버튼 생성 권한(buttonCreatePermission)과 동일하게 취급
+    @Transactional
+    public CreateTeamButtonCategoryResponseDto createCategory(Long userId, Long teamId, CreateTeamButtonCategoryRequestDto request) {
+        Team team = requireTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
+        requirePermission(team.getButtonCreatePermission(), requester);
+
+        if (request == null || isBlank(request.categoryName())) {
+            throw new TeamException(HttpStatus.BAD_REQUEST, "카테고리 이름은 필수입니다.");
+        }
+        if (teamButtonCategoryRepository.existsByTeamIdAndCategoryNameAndDeletedAtIsNull(teamId, request.categoryName())) {
+            throw new TeamException(HttpStatus.CONFLICT, "팀 내 동일 이름의 카테고리가 이미 존재합니다.");
+        }
+
+        Integer maxOrder = teamButtonCategoryRepository.findMaxDisplayOrderByTeamId(teamId);
+        int nextOrder = (maxOrder == null ? 0 : maxOrder) + 1;
+
+        TeamButtonCategory category = TeamButtonCategory.builder()
+                .teamId(teamId)
+                .categoryName(request.categoryName())
+                .categoryColor(isBlank(request.categoryColor()) ? "grey" : request.categoryColor())
+                .displayOrder(nextOrder)
+                .build();
+        TeamButtonCategory saved = teamButtonCategoryRepository.save(category);
+
+        return new CreateTeamButtonCategoryResponseDto(
+                saved.getCategoryId(), saved.getCategoryName(), saved.getCategoryColor(), saved.getDisplayOrder(), saved.getCreatedAt()
+        );
+    }
+
+    // 카테고리 수정 권한: buttonEditPermission(creator_or_leader/leader_only)을 따르는 것으로 가정.
+    // 단, 카테고리는 버튼과 달리 "생성자" 개념이 없어서 creator_or_leader 설정이면 팀원 누구나 가능한 것으로 취급함
+    // (leader_only일 때만 팀장 제한) — 하연님께 확인 필요한 부분이라 requirePermission()으로 우선 구현
+    @Transactional
+    public UpdateTeamButtonCategoryResponseDto updateCategory(Long userId, Long teamId, Long categoryId, UpdateTeamButtonCategoryRequestDto request) {
+        Team team = requireTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
+        requirePermission(team.getButtonEditPermission(), requester);
+
+        TeamButtonCategory category = teamButtonCategoryRepository.findByCategoryIdAndTeamIdAndDeletedAtIsNull(categoryId, teamId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀 또는 카테고리입니다."));
+
+        if (request != null && request.categoryName() != null) {
+            if (request.categoryName().isBlank()) {
+                throw new TeamException(HttpStatus.BAD_REQUEST, "카테고리 이름은 빈 값일 수 없습니다.");
+            }
+            if (teamButtonCategoryRepository.existsByTeamIdAndCategoryNameAndDeletedAtIsNullAndCategoryIdNot(teamId, request.categoryName(), categoryId)) {
+                throw new TeamException(HttpStatus.CONFLICT, "팀 내 동일 이름의 다른 카테고리가 이미 존재합니다.");
+            }
+            category.setCategoryName(request.categoryName());
+        }
+        if (request != null && request.categoryColor() != null) {
+            category.setCategoryColor(request.categoryColor());
+        }
+
+        TeamButtonCategory saved = teamButtonCategoryRepository.save(category);
+        return new UpdateTeamButtonCategoryResponseDto(
+                saved.getCategoryId(), saved.getCategoryName(), saved.getCategoryColor(), saved.getDisplayOrder(), saved.getUpdatedAt()
+        );
+    }
+
+    // 카테고리 삭제 권한: buttonDeletePermission을 따르는 것으로 가정 (수정 권한과 동일한 이유로 requirePermission() 사용)
+    @Transactional
+    public void deleteCategory(Long userId, Long teamId, Long categoryId, boolean deleteButtons) {
+        Team team = requireTeam(teamId);
+        TeamMember requester = requireMembership(teamId, userId);
+        requirePermission(team.getButtonDeletePermission(), requester);
+
+        TeamButtonCategory category = teamButtonCategoryRepository.findByCategoryIdAndTeamIdAndDeletedAtIsNull(categoryId, teamId)
+                .orElseThrow(() -> new TeamException(HttpStatus.NOT_FOUND, "존재하지 않는 팀 또는 카테고리입니다."));
+
+        category.setDeletedAt(LocalDateTime.now());
+        teamButtonCategoryRepository.save(category);
+
+        if (deleteButtons) {
+            teamButtonRepository.deactivateByTeamIdAndCategoryId(teamId, categoryId);
+        } else {
+            teamButtonRepository.clearCategoryIdByTeamIdAndCategoryId(teamId, categoryId);
+        }
+    }
+
     public List<TeamButtonListItemDto> listButtons(Long userId, Long teamId) {
         requireTeam(teamId);
         requireMembership(teamId, userId);
