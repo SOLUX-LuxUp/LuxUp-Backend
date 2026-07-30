@@ -414,9 +414,23 @@ public class TeamService {
         }
     }
 
+    private static final java.util.regex.Pattern DEFAULT_TEAM_NAME_PATTERN =
+            java.util.regex.Pattern.compile("^새로운 팀 (\\d+)$");
+
     private String defaultTeamName(Long userId) {
-        long existingCount = teamRepository.count(); // TODO: createdBy 기준으로 좁히는 카운트 쿼리로 교체 권장
-        return "새로운 팀 " + (existingCount + 1);
+        // 전체 팀 개수(다른 사용자 포함)가 아닌, 이 사용자가 만든 활성 팀 이름과의
+        // 충돌 여부를 확인해 비어있는 가장 작은 번호를 채워넣는다.
+        java.util.Set<Integer> usedNumbers = teamRepository.findAllByCreatedByAndDeletedAtIsNull(userId).stream()
+                .map(Team::getTeamName)
+                .map(DEFAULT_TEAM_NAME_PATTERN::matcher)
+                .filter(java.util.regex.Matcher::matches)
+                .map(matcher -> Integer.parseInt(matcher.group(1)))
+                .collect(Collectors.toSet());
+        int candidate = 1;
+        while (usedNumbers.contains(candidate)) {
+            candidate++;
+        }
+        return "새로운 팀 " + candidate;
     }
 
     private String generateUniqueInviteCode() {

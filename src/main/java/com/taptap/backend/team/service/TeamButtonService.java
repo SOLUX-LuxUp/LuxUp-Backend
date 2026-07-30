@@ -49,7 +49,7 @@ public class TeamButtonService {
             requireCategoryInTeam(teamId, request.categoryId());
         }
 
-        String buttonName = isBlank(request.buttonName()) ? "새로운 버튼" : request.buttonName();
+        String buttonName = resolveDefaultButtonName(teamId, request.buttonName());
         requireValidButtonNameLength(buttonName);
 
         TeamButton button = TeamButton.builder()
@@ -513,5 +513,27 @@ public class TeamButtonService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private static final java.util.regex.Pattern DEFAULT_TEAM_BUTTON_NAME_PATTERN =
+            java.util.regex.Pattern.compile("^새로운 버튼 (\\d+)$");
+
+    // 이름 미지정 시 팀 내 활성 버튼 이름과의 실제 충돌 여부를 확인해
+    // 비어있는 가장 작은 번호를 채워넣는다. (전체 개수 기반 번호 부여 시 1~13이 없는데 14가 붙는 문제 방지)
+    private String resolveDefaultButtonName(Long teamId, String requestedName) {
+        if (!isBlank(requestedName)) {
+            return requestedName;
+        }
+        Set<Integer> usedNumbers = teamButtonRepository.findAllByTeamIdAndIsActiveTrueAndDeletedAtIsNull(teamId).stream()
+                .map(TeamButton::getButtonName)
+                .map(DEFAULT_TEAM_BUTTON_NAME_PATTERN::matcher)
+                .filter(java.util.regex.Matcher::matches)
+                .map(matcher -> Integer.parseInt(matcher.group(1)))
+                .collect(Collectors.toSet());
+        int candidate = 1;
+        while (usedNumbers.contains(candidate)) {
+            candidate++;
+        }
+        return "새로운 버튼 " + candidate;
     }
 }
