@@ -19,5 +19,7 @@ public class LifestyleRecommendationDto {
     // recType == DELETE 일 때만 값 있음
     private Long buttonId;
     private String buttonName;
+    private String iconName;  // 삭제 제안 대상 버튼의 기존 아이콘
+    private String iconColor; // 삭제 제안 대상 버튼의 기존 아이콘 색상
     private LocalDateTime lastRecordedAt; // 기록이 아예 없던 버튼이면 null (그 경우 화면에서 "기록 없음" 등으로 처리)
 }

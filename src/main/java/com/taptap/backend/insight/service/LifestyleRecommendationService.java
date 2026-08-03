@@ -294,7 +294,10 @@ public class LifestyleRecommendationService {
                     .suggestedIconColor(rec.getSuggestedIconColor());
         } else if ("DELETE".equals(rec.getRecType()) && rec.getTargetButtonId() != null) {
             buttonRepository.findById(rec.getTargetButtonId())
-                    .ifPresent(btn -> builder.buttonId(btn.getButtonId()).buttonName(btn.getButtonName()));
+                    .ifPresent(btn -> builder.buttonId(btn.getButtonId())
+                            .buttonName(btn.getButtonName())
+                            .iconName(btn.getIconName())
+                            .iconColor(btn.getIconColor()));
 
             LocalDateTime lastRecordedAt = buttonRecordRepository
                     .findTopByButtonIdAndDeletedAtIsNullOrderByRecordedAtDesc(rec.getTargetButtonId())
