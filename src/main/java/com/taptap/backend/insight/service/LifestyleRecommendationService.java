@@ -46,9 +46,9 @@ public class LifestyleRecommendationService {
     private static final int DELETE_RECOMMENDATION_COUNT = 3;
 
     // 기획 확정 (신규): 라이프스타일 분석/AI 추천 활성화 조건
-    private static final int ANALYSIS_MIN_DAYS = 7;          // 라이프스타일 분석(라벨) 활성화: 이번 달 기록한 날이 7일 이상
+    private static final int ANALYSIS_MIN_DAYS = 3;          // 원래 7 → 임시로 낮춤, 라이프스타일 분석(라벨) 활성화: 이번 달 기록한 날이 7일 이상
     private static final int ANALYSIS_MIN_TAP_COUNT = 20;    // 라이프스타일 분석(라벨) 활성화: 이번 달 총 기록이 20회 이상
-    private static final int AI_RECOMMENDATION_START_DAY_OF_MONTH = 20; // AI 버튼 추천(ADD)은 매달 20일이 지나야 활성화
+    private static final int AI_RECOMMENDATION_START_DAY_OF_MONTH = 1; // 원래 20 → 임시로 낮춤, AI 버튼 추천(ADD)은 매달 20일이 지나야 활성화
 
     private static final int REGULAR_MIN_TAP_COUNT = 3; // 규칙적인 기억(간격): 간격 판단하려면 최소 3번(간격 2개)은 있어야 함
     private static final double REGULAR_INTERVAL_CV_THRESHOLD = 0.3; // 규칙적인 기억(간격): 탭 간격의 변동계수 30% 이하면 "규칙적"
