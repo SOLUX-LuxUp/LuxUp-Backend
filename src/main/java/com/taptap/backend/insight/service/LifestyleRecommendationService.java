@@ -42,7 +42,7 @@ public class LifestyleRecommendationService {
             "red", "orange", "yellow", "green", "cyan", "blue", "indigo", "purple", "pink", "grey", "darkgrey", "black"
     );
     private static final int RECOMMENDATION_VALID_DAYS = 30; // ADD 추천 만료 여유값(안전망 용도, 실제 재생성 기준은 "이번 달에 이미 만들었는지"임)
-    private static final int ADD_RECOMMENDATION_COUNT = 5;
+    private static final int ADD_RECOMMENDATION_COUNT = 10; // 기획 원안은 5개였는데, 프론트에서 자체 필터링(5개만 노출) 위해 넉넉하게 생성 요청해서 10으로 조정
     private static final int DELETE_RECOMMENDATION_COUNT = 3;
 
     // 기획 확정 (신규): 라이프스타일 분석/AI 추천 활성화 조건
