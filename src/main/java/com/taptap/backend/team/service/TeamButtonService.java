@@ -27,16 +27,19 @@ public class TeamButtonService {
     private final TeamButtonCategoryRepository teamButtonCategoryRepository;
     private final TeamButtonRecordRepository teamButtonRecordRepository;
     private final TeamButtonUserSettingRepository teamButtonUserSettingRepository;
+    private final TeamMemberProfileResolver profileResolver;
 
     public TeamButtonService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository,
                               TeamButtonRepository teamButtonRepository, TeamButtonCategoryRepository teamButtonCategoryRepository,
-                              TeamButtonRecordRepository teamButtonRecordRepository, TeamButtonUserSettingRepository teamButtonUserSettingRepository) {
+                              TeamButtonRecordRepository teamButtonRecordRepository, TeamButtonUserSettingRepository teamButtonUserSettingRepository,
+                              TeamMemberProfileResolver profileResolver) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.teamButtonRepository = teamButtonRepository;
         this.teamButtonCategoryRepository = teamButtonCategoryRepository;
         this.teamButtonRecordRepository = teamButtonRecordRepository;
         this.teamButtonUserSettingRepository = teamButtonUserSettingRepository;
+        this.profileResolver = profileResolver;
     }
 
     @Transactional
@@ -222,7 +225,7 @@ public class TeamButtonService {
         return new TeamButtonDetailResponseDto(
                 button.getTeamButtonId(), button.getTeamId(), button.getButtonName(), button.getIconName(),
                 button.getIconColor(), button.getDescription(), button.getTapPermission(), button.getIsActive(),
-                creator == null ? null : new MemberProfileDto(creator.getUserId(), creator.getDisplayName(), creator.getProfileImageUrl()),
+                creator == null ? null : new MemberProfileDto(creator.getUserId(), creator.getDisplayName(), profileResolver.resolveProfileImageUrl(creator)),
                 myPermission, canEdit, canDelete, isTeamOwner, button.getCategoryId(), categoryName, allowedUserIds,
                 buildLatestSummary(teamButtonId), button.getCreatedAt(), button.getUpdatedAt()
         );
@@ -480,7 +483,7 @@ public class TeamButtonService {
 
     private MemberProfileDto memberProfile(Long teamId, Long userId) {
         return teamMemberRepository.findByTeamIdAndUserIdAndDeletedAtIsNull(teamId, userId)
-                .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl()))
+                .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), profileResolver.resolveProfileImageUrl(m)))
                 .orElse(new MemberProfileDto(userId, null, null));
     }
 

@@ -29,14 +29,17 @@ public class TeamInsightService {
     private final TeamButtonRepository teamButtonRepository;
     private final TeamButtonCategoryRepository teamButtonCategoryRepository;
     private final TeamButtonRecordRepository teamButtonRecordRepository;
+    private final TeamMemberProfileResolver profileResolver;
 
     public TeamInsightService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, TeamButtonRepository teamButtonRepository,
-                               TeamButtonCategoryRepository teamButtonCategoryRepository, TeamButtonRecordRepository teamButtonRecordRepository) {
+                               TeamButtonCategoryRepository teamButtonCategoryRepository, TeamButtonRecordRepository teamButtonRecordRepository,
+                               TeamMemberProfileResolver profileResolver) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.teamButtonRepository = teamButtonRepository;
         this.teamButtonCategoryRepository = teamButtonCategoryRepository;
         this.teamButtonRecordRepository = teamButtonRecordRepository;
+        this.profileResolver = profileResolver;
     }
 
     public DailyInsightResponseDto getDailyInsight(Long userId, Long teamId, LocalDate targetDate) {
@@ -200,7 +203,7 @@ public class TeamInsightService {
                             .orElse(null);
                     TeamMember member = ctx.members.get(uid);
                     return new InsightMemberActivityDto(
-                            uid, member == null ? null : member.getDisplayName(), member == null ? null : member.getProfileImageUrl(),
+                            uid, member == null ? null : member.getDisplayName(), member == null ? null : profileResolver.resolveProfileImageUrl(member),
                             (long) memberRecords.size(), memberTopButton
                     );
                 })
@@ -232,7 +235,7 @@ public class TeamInsightService {
         TeamMember member = ctx.members.get(userId);
         return member == null
                 ? new MemberProfileDto(userId, null, null)
-                : new MemberProfileDto(userId, member.getDisplayName(), member.getProfileImageUrl());
+                : new MemberProfileDto(userId, member.getDisplayName(), profileResolver.resolveProfileImageUrl(member));
     }
 
     private Context buildContext(Long teamId) {

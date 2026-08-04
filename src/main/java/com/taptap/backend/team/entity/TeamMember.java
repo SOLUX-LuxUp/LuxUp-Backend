@@ -31,6 +31,12 @@ public class TeamMember {
     @Column(name = "profile_image_url")
     private String profileImageUrl;
 
+    // "팀 내 프로필 수정"으로 프로필 사진을 직접 커스터마이징했는지 여부.
+    // false면 개인 파트 프로필 사진을 실시간으로 반영하고, true면 이 값을 그대로 유지한다. (기획 확정 A안, 김누리님)
+    @Builder.Default
+    @Column(name = "profile_image_customized", nullable = false)
+    private Boolean profileImageCustomized = false;
+
     @Builder.Default
     @Column(name = "role", nullable = false, length = 20)
     private String role = "member"; // owner / member
