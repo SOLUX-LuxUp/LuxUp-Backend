@@ -35,14 +35,17 @@ public class TeamService {
     private final UserRepository userRepository;
     private final TeamButtonRecordRepository teamButtonRecordRepository;
     private final TeamButtonRepository teamButtonRepository;
+    private final TeamMemberProfileResolver profileResolver;
 
     public TeamService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, UserRepository userRepository,
-                        TeamButtonRecordRepository teamButtonRecordRepository, TeamButtonRepository teamButtonRepository) {
+                        TeamButtonRecordRepository teamButtonRecordRepository, TeamButtonRepository teamButtonRepository,
+                        TeamMemberProfileResolver profileResolver) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userRepository = userRepository;
         this.teamButtonRecordRepository = teamButtonRecordRepository;
         this.teamButtonRepository = teamButtonRepository;
+        this.profileResolver = profileResolver;
     }
 
     @Transactional
@@ -287,7 +290,7 @@ public class TeamService {
         List<TeamMember> members = teamMemberRepository.findAllByTeamIdAndDeletedAtIsNullOrderByJoinedAtAsc(teamId);
         return members.stream()
                 .map(m -> new TeamMemberListItemDto(
-                        m.getUserId(), m.getDisplayName(), m.getProfileImageUrl(), m.getRole(), m.getJoinedAt(),
+                        m.getUserId(), m.getDisplayName(), profileResolver.resolveProfileImageUrl(m), m.getRole(), m.getJoinedAt(),
                         latestRecordOf(teamId, m.getUserId())
                 ))
                 .collect(Collectors.toList());
@@ -356,7 +359,7 @@ public class TeamService {
         boolean isOwner = requestingMember != null && requestingMember.isOwner();
 
         List<MemberProfileDto> profiles = members.stream()
-                .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl()))
+                .map(m -> new MemberProfileDto(m.getUserId(), m.getDisplayName(), profileResolver.resolveProfileImageUrl(m)))
                 .collect(Collectors.toList());
 
         Map<Long, TeamMember> memberByUserId = members.stream()
@@ -382,7 +385,7 @@ public class TeamService {
                 .map(uid -> {
                     TeamMember m = memberByUserId.get(uid);
                     return m == null ? new MemberProfileDto(uid, null, null)
-                            : new MemberProfileDto(m.getUserId(), m.getDisplayName(), m.getProfileImageUrl());
+                            : new MemberProfileDto(m.getUserId(), m.getDisplayName(), profileResolver.resolveProfileImageUrl(m));
                 })
                 .collect(Collectors.toList());
 

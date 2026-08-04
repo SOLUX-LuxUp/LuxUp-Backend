@@ -34,16 +34,19 @@ public class TeamMemberProfileService {
     private final ButtonCategoryRepository buttonCategoryRepository;
     private final ButtonRecordRepository buttonRecordRepository;
     private final TeamMemberButtonSharingRepository teamMemberButtonSharingRepository;
+    private final TeamMemberProfileResolver profileResolver;
 
     public TeamMemberProfileService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, ButtonRepository buttonRepository,
                                      ButtonCategoryRepository buttonCategoryRepository, ButtonRecordRepository buttonRecordRepository,
-                                     TeamMemberButtonSharingRepository teamMemberButtonSharingRepository) {
+                                     TeamMemberButtonSharingRepository teamMemberButtonSharingRepository,
+                                     TeamMemberProfileResolver profileResolver) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.buttonRepository = buttonRepository;
         this.buttonCategoryRepository = buttonCategoryRepository;
         this.buttonRecordRepository = buttonRecordRepository;
         this.teamMemberButtonSharingRepository = teamMemberButtonSharingRepository;
+        this.profileResolver = profileResolver;
     }
 
     public TeamProfileResponseDto getProfile(Long userId, Long teamId) {
@@ -57,7 +60,7 @@ public class TeamMemberProfileService {
                 .map(b -> toProfileButtonItem(b, categoryNames, sharedMap))
                 .collect(Collectors.toList());
 
-        return new TeamProfileResponseDto(teamId, userId, member.getDisplayName(), member.getProfileImageUrl(), buttonItems);
+        return new TeamProfileResponseDto(teamId, userId, member.getDisplayName(), profileResolver.resolveProfileImageUrl(member), buttonItems);
     }
 
     @Transactional
@@ -70,10 +73,11 @@ public class TeamMemberProfileService {
         }
         if (request.profileImageUrl() != null) {
             member.setProfileImageUrl(request.profileImageUrl());
+            member.setProfileImageCustomized(true);
         }
         teamMemberRepository.save(member);
 
-        return new UpdateTeamProfileResponseDto(teamId, userId, member.getDisplayName(), member.getProfileImageUrl(), LocalDateTime.now());
+        return new UpdateTeamProfileResponseDto(teamId, userId, member.getDisplayName(), profileResolver.resolveProfileImageUrl(member), LocalDateTime.now());
     }
 
     public MemberRecordsResponseDto getMemberRecords(Long requesterId, Long teamId, Long targetUserId, Long cursor, Integer limit) {
@@ -91,7 +95,7 @@ public class TeamMemberProfileService {
                 .collect(Collectors.toList());
 
         if (sharedButtonIds.isEmpty()) {
-            return new MemberRecordsResponseDto(targetUserId, target.getDisplayName(), target.getProfileImageUrl(), false, null, List.of(), List.of());
+            return new MemberRecordsResponseDto(targetUserId, target.getDisplayName(), profileResolver.resolveProfileImageUrl(target), false, null, List.of(), List.of());
         }
 
         Map<Long, Button> buttonMap = buttonRepository.findAllById(sharedButtonIds).stream()
@@ -119,7 +123,7 @@ public class TeamMemberProfileService {
 
         Long nextCursor = hasMore && !page.isEmpty() ? page.get(page.size() - 1).getRecordId() : null;
 
-        return new MemberRecordsResponseDto(targetUserId, target.getDisplayName(), target.getProfileImageUrl(), hasMore, nextCursor, buttonItems, timeline);
+        return new MemberRecordsResponseDto(targetUserId, target.getDisplayName(), profileResolver.resolveProfileImageUrl(target), hasMore, nextCursor, buttonItems, timeline);
     }
 
     @Transactional

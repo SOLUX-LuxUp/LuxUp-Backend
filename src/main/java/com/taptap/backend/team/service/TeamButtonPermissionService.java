@@ -22,13 +22,16 @@ public class TeamButtonPermissionService {
     private final TeamButtonRepository teamButtonRepository;
     private final TeamButtonUserSettingRepository teamButtonUserSettingRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final TeamMemberProfileResolver profileResolver;
 
     public TeamButtonPermissionService(TeamButtonRepository teamButtonRepository,
                                         TeamButtonUserSettingRepository teamButtonUserSettingRepository,
-                                        TeamMemberRepository teamMemberRepository) {
+                                        TeamMemberRepository teamMemberRepository,
+                                        TeamMemberProfileResolver profileResolver) {
         this.teamButtonRepository = teamButtonRepository;
         this.teamButtonUserSettingRepository = teamButtonUserSettingRepository;
         this.teamMemberRepository = teamMemberRepository;
+        this.profileResolver = profileResolver;
     }
 
     @Transactional
@@ -107,7 +110,7 @@ public class TeamButtonPermissionService {
                     return new TapPermissionRequestListItemDto(
                             setting.getUserId(),
                             member == null ? null : member.getDisplayName(),
-                            member == null ? null : member.getProfileImageUrl(),
+                            member == null ? null : profileResolver.resolveProfileImageUrl(member),
                             setting.getRequestedAt()
                     );
                 })
