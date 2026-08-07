@@ -74,16 +74,24 @@ public class LifestyleRecommendationService {
      * DELETE 추천(AI 불필요, 쿼리만 하면 되니 -> 매번 라이브로 재계산해서 최신 상태 유지)
      */
     @Transactional
-    public LifestyleRecommendationsResponseDto getRecommendations(Long userId) {
+    public LifestyleRecommendationsResponseDto getRecommendations(Long userId, Integer year, Integer month) {
         List<Long> buttonIds = buttonRepository.findActiveButtonIdsByUserId(userId);
         LocalDate today = LocalDate.now();
-        LocalDate monthStart = today.withDayOfMonth(1);
-        LocalDateTime monthStartAt = monthStart.atStartOfDay();
-        LocalDateTime monthEndAt = monthStart.plusMonths(1).atStartOfDay();
+
+        // year/month가 없으면 이번 달, 있으면 해당 달(과거 달 포함) 기준으로 계산한다.
+        LocalDate targetMonthStart = (year != null && month != null)
+                ? LocalDate.of(year, month, 1)
+                : today.withDayOfMonth(1);
+        boolean isCurrentMonth = targetMonthStart.equals(today.withDayOfMonth(1));
+
+        LocalDateTime monthStartAt = targetMonthStart.atStartOfDay();
+        LocalDateTime monthEndAt = targetMonthStart.plusMonths(1).atStartOfDay(); // 해당 달의 끝(다음 달 1일, exclusive)
+        // 이번 달이면 "오늘까지"만, 과거 달이면 "그 달 전체"를 집계 범위로 삼는다.
+        LocalDateTime recordsEndAt = isCurrentMonth ? today.plusDays(1).atStartOfDay() : monthEndAt;
 
         List<ButtonRecord> thisMonthRecords = buttonIds.isEmpty()
                 ? List.of()
-                : buttonRecordRepository.findRecordsInRange(buttonIds, monthStartAt, today.plusDays(1).atStartOfDay());
+                : buttonRecordRepository.findRecordsInRange(buttonIds, monthStartAt, recordsEndAt);
         Map<Long, Button> buttonMap = buttonIds.isEmpty()
                 ? Map.of()
                 : buttonRepository.findAllById(buttonIds).stream().collect(Collectors.toMap(Button::getButtonId, b -> b));
@@ -101,34 +109,41 @@ public class LifestyleRecommendationService {
                 })
                 .toList();
 
-        // 라이프스타일 분석(라벨)은 이번 달 기록이 7일 이상 & 20회 이상일 때만 활성화
+        // 라이프스타일 분석(라벨)은 조회 대상 달 기록이 7일 이상 & 20회 이상일 때만 활성화
         boolean analysisAvailable = hasEnoughDataForAnalysis(thisMonthRecords);
         LifestyleLabel label = analysisAvailable
                 ? computeLifestyleLabel(thisMonthRecords, buttonMap, top5ButtonEntries)
                 : null;
 
-        List<LifestyleRecommendation> allActive = lifestyleRecommendationRepository.findActiveByUserId(userId);
-
-        // AI 추천(ADD)은 매달 20일이 지나야 활성화되고, 그 달에 딱 1번만 생성한다.
-        boolean aiWindowOpen = today.getDayOfMonth() >= AI_RECOMMENDATION_START_DAY_OF_MONTH;
-        boolean alreadyGeneratedThisMonth = lifestyleRecommendationRepository
+        // ===== ADD 추천 =====
+        // AI 생성은 이번 달 조회일 때만 수행한다 (매달 20일이 지나야 활성화, 그 달에 딱 1번만 생성).
+        // 과거 달을 조회할 때는 새로 생성하지 않고, "그 달에 이미 생성돼 있던" ADD 추천만 그대로 보여준다.
+        boolean aiWindowOpen = isCurrentMonth && today.getDayOfMonth() >= AI_RECOMMENDATION_START_DAY_OF_MONTH;
+        boolean alreadyGeneratedThisMonth = isCurrentMonth && lifestyleRecommendationRepository
                 .existsByUserIdAndRecTypeAndCreatedAtBetween(userId, "ADD", monthStartAt, monthEndAt);
 
-        List<LifestyleRecommendation> activeAdd = allActive.stream()
-                .filter(r -> "ADD".equals(r.getRecType()))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        if (!alreadyGeneratedThisMonth && aiWindowOpen && analysisAvailable) {
+        if (isCurrentMonth && !alreadyGeneratedThisMonth && aiWindowOpen && analysisAvailable) {
             List<LifestyleRecommendation> newAdd = generateAddRecommendations(userId, thisMonthRecords, buttonMap, top5ButtonEntries);
             if (!newAdd.isEmpty()) {
-                activeAdd = lifestyleRecommendationRepository.saveAll(newAdd);
+                lifestyleRecommendationRepository.saveAll(newAdd);
             }
         }
 
-        List<LifestyleRecommendation> existingDelete = allActive.stream()
-                .filter(r -> "DELETE".equals(r.getRecType()))
-                .collect(Collectors.toCollection(ArrayList::new));
-        List<LifestyleRecommendation> activeDelete = refreshDeleteRecommendations(userId, buttonIds, existingDelete);
+        List<LifestyleRecommendation> activeAdd = lifestyleRecommendationRepository
+                .findByUserIdAndRecTypeAndCreatedAtBetweenAndNotActioned(userId, "ADD", monthStartAt, monthEndAt);
+
+        // ===== DELETE 추천 =====
+        // "지금 이 순간 기준 미사용 1달 이상"을 매번 라이브로 계산하는 개념이라, 이번 달 조회일 때만 의미가 있다.
+        // 과거 달을 조회할 때는 DELETE 추천을 아예 보여주지 않는다 (기획 확정).
+        List<LifestyleRecommendation> activeDelete;
+        if (isCurrentMonth) {
+            List<LifestyleRecommendation> existingDelete = lifestyleRecommendationRepository.findActiveByUserId(userId).stream()
+                    .filter(r -> "DELETE".equals(r.getRecType()))
+                    .collect(Collectors.toCollection(ArrayList::new));
+            activeDelete = refreshDeleteRecommendations(userId, buttonIds, existingDelete);
+        } else {
+            activeDelete = List.of();
+        }
 
         List<LifestyleRecommendationDto> recommendations = new ArrayList<>();
         activeAdd.forEach(r -> recommendations.add(toDto(r)));

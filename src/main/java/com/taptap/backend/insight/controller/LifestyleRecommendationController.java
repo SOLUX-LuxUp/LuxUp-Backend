@@ -20,12 +20,16 @@ public class LifestyleRecommendationController {
 
     private final LifestyleRecommendationService lifestyleRecommendationService;
 
-    @Operation(summary = "이 달의 라이프스타일 라벨 + 추천 목록 조회 (추천은 없으면 새로 생성)")
+    @Operation(summary = "이 달의 라이프스타일 라벨 + 추천 목록 조회 (추천은 없으면 새로 생성, year/month 없으면 이번 달)")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping
-    public ApiResponse<LifestyleRecommendationsResponseDto> getRecommendations(Authentication authentication) {
+    public ApiResponse<LifestyleRecommendationsResponseDto> getRecommendations(
+            Authentication authentication,
+            @RequestParam(value = "year", required = false) Integer year,
+            @RequestParam(value = "month", required = false) Integer month
+    ) {
         Long userId = (Long) authentication.getPrincipal();
-        LifestyleRecommendationsResponseDto response = lifestyleRecommendationService.getRecommendations(userId);
+        LifestyleRecommendationsResponseDto response = lifestyleRecommendationService.getRecommendations(userId, year, month);
         return ApiResponse.success("라이프스타일 조회가 완료되었습니다.", response);
     }
 
