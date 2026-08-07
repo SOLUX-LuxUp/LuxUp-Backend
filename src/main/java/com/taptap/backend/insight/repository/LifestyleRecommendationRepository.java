@@ -20,4 +20,16 @@ public interface LifestyleRecommendationRepository extends JpaRepository<Lifesty
     boolean existsByUserIdAndRecTypeAndCreatedAtBetween(
             Long userId, String recType, LocalDateTime start, LocalDateTime end
     );
+
+    // 특정 달(createdAt 기준)에 생성됐고, 아직 수락/거절 안 된 추천 목록.
+    // 먼슬리 인사이트에서 과거 달을 조회할 때도 "그 달의 ADD 추천"을 그대로 보여줘야 하므로,
+    // findActiveByUserId와 달리 expiresAt(만료) 조건은 걸지 않는다.
+    @Query("SELECT lr FROM LifestyleRecommendation lr WHERE lr.userId = :userId " +
+            "AND lr.recType = :recType " +
+            "AND lr.isAccepted = false AND lr.isDismissed = false " +
+            "AND lr.createdAt >= :start AND lr.createdAt < :end")
+    List<LifestyleRecommendation> findByUserIdAndRecTypeAndCreatedAtBetweenAndNotActioned(
+            @Param("userId") Long userId, @Param("recType") String recType,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end
+    );
 }
